@@ -105,6 +105,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.storage.local.set({ settings: msg.settings }).then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (msg.kind === "FETCH_PHOTO") {
+    (async () => {
+      try {
+        const res = await fetch(msg.url, { credentials: "omit" });
+        if (!res.ok) throw new Error("status " + res.status);
+        const blob = await res.blob();
+        const dataUrl = await new Promise((r) => {
+          const fr = new FileReader();
+          fr.onload = () => r(fr.result);
+          fr.readAsDataURL(blob);
+        });
+        sendResponse({ ok: true, dataUrl });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message });
+      }
+    })();
+    return true;
+  }
   if (msg.kind === "SIGN_OUT") {
     chrome.storage.local
       .remove(["session", "user", "supabaseUrl", "supabaseAnonKey"])
