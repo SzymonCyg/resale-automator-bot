@@ -6,71 +6,94 @@
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <span class="logo">V</span>
-        <div>
-          <h1>Vinted Manager</h1>
-          <p id="whoami" class="muted">—</p>
-        </div>
-      </div>
-      <nav class="tabs">
-        <button class="tab active" data-tab="items">Przedmioty</button>
-        <button class="tab" data-tab="messages">Wiadomości</button>
-        <button class="tab" data-tab="settings">Ustawienia</button>
-      </nav>
-    </header>
-
-    <!-- ITEMS -->
-    <section class="view" data-view="items">
-      <div class="toolbar">
-        <div class="left">
-          <button id="refreshItems" class="btn">↻ Odśwież</button>
-          <button id="syncItems" class="btn">☁ Synchronizuj do panelu</button>
-          <span id="itemsStatus" class="muted"></span>
-        </div>
-        <div class="right">
-          <span id="selCount" class="muted">0 zaznaczonych</span>
-          <button id="relistBtn" class="btn primary" disabled>Wystaw ponownie</button>
-        </div>
-      </div>
-
-      <div class="table-wrap">
-        <table id="itemsTable">
-          <thead>
-            <tr>
-              <th style="width:36px"><input type="checkbox" id="selAll" /></th>
-              <th style="width:64px">Foto</th>
-              <th>Tytuł</th>
-              <th>Marka / rozmiar</th>
-              <th style="text-align:right">Cena</th>
-              <th style="text-align:right">Wyśw.</th>
-              <th style="text-align:right">❤</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="itemsBody">
-            <tr><td colspan="8" class="empty">Otwórz zalogowaną kartę vinted.* i kliknij Odśwież.</td></tr>
-          </tbody>
-        </table>
+    <!-- SCREEN A: LOGIN -->
+    <section id="screenLogin" class="auth-screen hidden">
+      <div class="auth-card">
+        <span class="logo logo-big">V</span>
+        <h1>Vinted Manager</h1>
+        <p class="muted">Zaloguj się tym samym kontem Google, którego używasz w panelu.</p>
+        <button id="signinBtn" class="btn primary">Zaloguj przez Google</button>
+        <p id="signinStatus" class="muted small"></p>
       </div>
     </section>
 
-    <!-- MESSAGES (auto-reply rules quick view) -->
-    <section class="view hidden" data-view="messages">
-      <p class="muted">Reguły automatycznych odpowiedzi konfigurujesz w zakładce Ustawienia. Sprawdzane są co 5 min na otwartej karcie Vinted.</p>
+    <!-- SCREEN B: CONFIRMATION -->
+    <section id="screenConfirm" class="auth-screen hidden">
+      <div class="auth-card">
+        <div class="check-ok">✓</div>
+        <h1>Zalogowano</h1>
+        <p id="confirmWho" class="muted">—</p>
+        <button id="goToPanelBtn" class="btn">Przejdź do panelu</button>
+      </div>
     </section>
 
-    <!-- SETTINGS -->
-    <section class="view hidden" data-view="settings">
-      <div class="card">
-        <h2>Auto-odpowiedzi</h2>
-        <div id="rules"></div>
-        <button id="addRule" class="btn">+ Dodaj regułę</button>
-      </div>
-      <button id="saveSettings" class="btn primary">Zapisz ustawienia</button>
-      <span id="saveStatus" class="muted"></span>
-    </section>
+    <!-- SCREEN C: MAIN -->
+    <div id="screenMain" class="hidden">
+      <header class="topbar">
+        <div class="brand">
+          <span class="logo">V</span>
+          <div>
+            <h1>Vinted Manager</h1>
+            <p id="whoami" class="muted">—</p>
+          </div>
+        </div>
+        <nav class="tabs">
+          <button class="tab active" data-tab="items">Przedmioty</button>
+          <button class="tab" data-tab="messages">Wiadomości</button>
+          <button class="tab" data-tab="settings">Ustawienia</button>
+          <button id="signoutBtn" class="btn ghost" style="margin-left:8px">Wyloguj</button>
+        </nav>
+      </header>
+
+      <!-- ITEMS -->
+      <section class="view" data-view="items">
+        <div class="toolbar">
+          <div class="left">
+            <button id="refreshItems" class="btn">↻ Odśwież</button>
+            <button id="syncItems" class="btn">☁ Synchronizuj do panelu</button>
+            <span id="itemsStatus" class="muted"></span>
+          </div>
+          <div class="right">
+            <span id="selCount" class="muted">0 zaznaczonych</span>
+            <button id="relistBtn" class="btn primary" disabled>Wystaw ponownie</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="itemsTable">
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="selAll" /></th>
+                <th style="width:64px">Foto</th>
+                <th>Tytuł</th>
+                <th>Marka / rozmiar</th>
+                <th style="text-align:right">Cena</th>
+                <th style="text-align:right">Wyśw.</th>
+                <th style="text-align:right">❤</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="itemsBody">
+              <tr><td colspan="8" class="empty">Otwórz zalogowaną kartę vinted.* i kliknij Odśwież.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view hidden" data-view="messages">
+        <p class="muted">Reguły automatycznych odpowiedzi konfigurujesz w zakładce Ustawienia. Sprawdzane są co 5 min na otwartej karcie Vinted.</p>
+      </section>
+
+      <section class="view hidden" data-view="settings">
+        <div class="card">
+          <h2>Auto-odpowiedzi</h2>
+          <div id="rules"></div>
+          <button id="addRule" class="btn">+ Dodaj regułę</button>
+        </div>
+        <button id="saveSettings" class="btn primary">Zapisz ustawienia</button>
+        <span id="saveStatus" class="muted"></span>
+      </section>
+    </div>
 
     <!-- RELIST MODAL -->
     <div id="relistModal" class="modal hidden">
@@ -82,23 +105,14 @@
 
         <div class="relist-controls">
           <fieldset>
-            <legend>Tryb edycji zdjęć</legend>
-            <label><input type="radio" name="photoMode" value="auto" checked /> Automatyczna (obrót ±1°)</label>
-            <label><input type="radio" name="photoMode" value="manual" /> Ręczna (edytuj każde poniżej)</label>
-            <label><input type="radio" name="photoMode" value="none" /> Bez zmian</label>
-          </fieldset>
-          <fieldset>
-            <legend>Cena — masowa zmiana procentowa</legend>
-            <div class="row">
-              <input type="number" step="0.1" id="bulkPricePct" placeholder="np. -10 lub 15" />
-              <span class="muted">%</span>
-              <button id="applyBulkPrice" class="btn">Zastosuj do wszystkich</button>
-            </div>
-            <p class="muted" style="margin:6px 0 0">Cenę pojedynczego przedmiotu możesz też edytować ręcznie na liście poniżej.</p>
+            <legend>Tryb</legend>
+            <label><input type="radio" name="photoMode" value="auto" checked /> Automatyczna (bez zmian)</label>
+            <label><input type="radio" name="photoMode" value="manual" /> Ręczna (edytuj zdjęcia)</label>
           </fieldset>
         </div>
 
-        <div id="relistList" class="relist-list"></div>
+        <div id="relistSummary" class="relist-summary"></div>
+        <div id="relistList" class="relist-list hidden"></div>
 
         <footer class="modal-foot">
           <button id="cancelRelist" class="btn ghost">Anuluj</button>
