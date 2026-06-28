@@ -91,7 +91,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Panel + wtyczka Chrome do zarządzania kontami Vinted: lista przedmiotów, eksport Excel/CSV, automatyczne ponowne wystawianie i auto-odpowiedzi.",
       },
-      { property: "og:title", content: "Vinted Manager" },
+      { property: "og:title", content: "Vinted Manager — panel do automatyzacji konta Vinted" },
       {
         property: "og:description",
         content:
@@ -99,6 +99,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "Vinted Manager — panel do automatyzacji konta Vinted" },
+      { name: "description", content: "Vinted Magic streamlines Vinted account management with item listing previews, export options, and automated messaging." },
+      { property: "og:description", content: "Vinted Magic streamlines Vinted account management with item listing previews, export options, and automated messaging." },
+      { name: "twitter:description", content: "Vinted Magic streamlines Vinted account management with item listing previews, export options, and automated messaging." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b3f6944c-4d6f-4e07-ae32-450983c9856b/id-preview-cffba44c--ea1ec93b-9673-4248-b730-b54d73a1e3f8.lovable.app-1782672385074.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b3f6944c-4d6f-4e07-ae32-450983c9856b/id-preview-cffba44c--ea1ec93b-9673-4248-b730-b54d73a1e3f8.lovable.app-1782672385074.png" },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
   }),
