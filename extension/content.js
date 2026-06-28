@@ -102,14 +102,18 @@
     });
   }
 
-  function pageUploadPhoto(dataUrl, tempUuid, csrfToken) {
+  function pageUploadPhoto(dataUrl, csrfToken) {
+    const photoUuid = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     return bridgeRequest("UPLOAD_PHOTO", {
       dataUrl,
-      tempUuid,
+      tempUuid: photoUuid,
       csrfToken,
       filename: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
     }, 60000);
   }
+
 
   async function vintedApi(path, init = {}) {
     const res = await pageFetch(path, init);
@@ -337,8 +341,9 @@
     return { uploadSessionId, csrfToken };
   }
 
-  async function uploadPhotoDataUrl(dataUrl, tempUuid, csrfToken) {
-    const res = await pageUploadPhoto(dataUrl, tempUuid, csrfToken);
+  async function uploadPhotoDataUrl(dataUrl, _tempUuid, csrfToken) {
+    const res = await pageUploadPhoto(dataUrl, csrfToken);
+
     if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
     const j = res.json;
     const id = j?.photo?.id ?? j?.id;

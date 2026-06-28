@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "0.7.1";
+  const BRIDGE_VERSION = "0.7.4";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -72,9 +72,13 @@
       if (msg.kind === "UPLOAD_PHOTO") {
         const form = new FormData();
         const blob = await dataUrlToBlob(msg.dataUrl);
+        // Kolejność jak w Dotb: type, file, temp_uuid — każde zdjęcie dostaje własne UUID
         form.append("photo[type]", "item");
-        if (msg.tempUuid) form.append("photo[temp_uuid]", msg.tempUuid);
         form.append("photo[file]", blob, msg.filename || `photo-${Date.now()}.jpg`);
+        const tempUuid = msg.tempUuid
+          || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+        form.append("photo[temp_uuid]", tempUuid);
+
 
         const headers = new Headers();
         if (csrf) headers.set("X-CSRF-Token", csrf);
