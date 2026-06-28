@@ -29,6 +29,9 @@ $("signin").addEventListener("click", async () => {
   chrome.storage.onChanged.addListener(listener);
 });
 
+$("openPanel").addEventListener("click", () =>
+  chrome.tabs.create({ url: chrome.runtime.getURL("panel.html") }),
+);
 $("openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 $("signout").addEventListener("click", async () => {
