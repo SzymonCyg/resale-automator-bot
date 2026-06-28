@@ -14,6 +14,10 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDownloadExtensionRouteImport } from './routes/_authenticated/download-extension'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as ApiPublicExtensionTasksRouteImport } from './routes/api/public/extension/tasks'
+import { Route as ApiPublicExtensionSyncItemsRouteImport } from './routes/api/public/extension/sync-items'
+import { Route as ApiPublicExtensionPairRouteImport } from './routes/api/public/extension/pair'
+import { Route as ApiPublicExtensionMatchReplyRouteImport } from './routes/api/public/extension/match-reply'
 import { Route as AuthenticatedAccountsAccountIdLogsRouteImport } from './routes/_authenticated/accounts.$accountId.logs'
 import { Route as AuthenticatedAccountsAccountIdItemsRouteImport } from './routes/_authenticated/accounts.$accountId.items'
 import { Route as AuthenticatedAccountsAccountIdAutoReplyRouteImport } from './routes/_authenticated/accounts.$accountId.auto-reply'
@@ -44,6 +48,28 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicExtensionTasksRoute = ApiPublicExtensionTasksRouteImport.update({
+  id: '/api/public/extension/tasks',
+  path: '/api/public/extension/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicExtensionSyncItemsRoute =
+  ApiPublicExtensionSyncItemsRouteImport.update({
+    id: '/api/public/extension/sync-items',
+    path: '/api/public/extension/sync-items',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicExtensionPairRoute = ApiPublicExtensionPairRouteImport.update({
+  id: '/api/public/extension/pair',
+  path: '/api/public/extension/pair',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicExtensionMatchReplyRoute =
+  ApiPublicExtensionMatchReplyRouteImport.update({
+    id: '/api/public/extension/match-reply',
+    path: '/api/public/extension/match-reply',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedAccountsAccountIdLogsRoute =
   AuthenticatedAccountsAccountIdLogsRouteImport.update({
     id: '/accounts/$accountId/logs',
@@ -78,6 +104,10 @@ export interface FileRoutesByFullPath {
   '/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
   '/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
+  '/api/public/extension/match-reply': typeof ApiPublicExtensionMatchReplyRoute
+  '/api/public/extension/pair': typeof ApiPublicExtensionPairRoute
+  '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
+  '/api/public/extension/tasks': typeof ApiPublicExtensionTasksRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -88,6 +118,10 @@ export interface FileRoutesByTo {
   '/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
   '/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
+  '/api/public/extension/match-reply': typeof ApiPublicExtensionMatchReplyRoute
+  '/api/public/extension/pair': typeof ApiPublicExtensionPairRoute
+  '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
+  '/api/public/extension/tasks': typeof ApiPublicExtensionTasksRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -100,6 +134,10 @@ export interface FileRoutesById {
   '/_authenticated/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/_authenticated/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
   '/_authenticated/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
+  '/api/public/extension/match-reply': typeof ApiPublicExtensionMatchReplyRoute
+  '/api/public/extension/pair': typeof ApiPublicExtensionPairRoute
+  '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
+  '/api/public/extension/tasks': typeof ApiPublicExtensionTasksRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -112,6 +150,10 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/auto-reply'
     | '/accounts/$accountId/items'
     | '/accounts/$accountId/logs'
+    | '/api/public/extension/match-reply'
+    | '/api/public/extension/pair'
+    | '/api/public/extension/sync-items'
+    | '/api/public/extension/tasks'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -122,6 +164,10 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/auto-reply'
     | '/accounts/$accountId/items'
     | '/accounts/$accountId/logs'
+    | '/api/public/extension/match-reply'
+    | '/api/public/extension/pair'
+    | '/api/public/extension/sync-items'
+    | '/api/public/extension/tasks'
   id:
     | '__root__'
     | '/'
@@ -133,12 +179,20 @@ export interface FileRouteTypes {
     | '/_authenticated/accounts/$accountId/auto-reply'
     | '/_authenticated/accounts/$accountId/items'
     | '/_authenticated/accounts/$accountId/logs'
+    | '/api/public/extension/match-reply'
+    | '/api/public/extension/pair'
+    | '/api/public/extension/sync-items'
+    | '/api/public/extension/tasks'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicExtensionMatchReplyRoute: typeof ApiPublicExtensionMatchReplyRoute
+  ApiPublicExtensionPairRoute: typeof ApiPublicExtensionPairRoute
+  ApiPublicExtensionSyncItemsRoute: typeof ApiPublicExtensionSyncItemsRoute
+  ApiPublicExtensionTasksRoute: typeof ApiPublicExtensionTasksRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -177,6 +231,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/extension/tasks': {
+      id: '/api/public/extension/tasks'
+      path: '/api/public/extension/tasks'
+      fullPath: '/api/public/extension/tasks'
+      preLoaderRoute: typeof ApiPublicExtensionTasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/extension/sync-items': {
+      id: '/api/public/extension/sync-items'
+      path: '/api/public/extension/sync-items'
+      fullPath: '/api/public/extension/sync-items'
+      preLoaderRoute: typeof ApiPublicExtensionSyncItemsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/extension/pair': {
+      id: '/api/public/extension/pair'
+      path: '/api/public/extension/pair'
+      fullPath: '/api/public/extension/pair'
+      preLoaderRoute: typeof ApiPublicExtensionPairRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/extension/match-reply': {
+      id: '/api/public/extension/match-reply'
+      path: '/api/public/extension/match-reply'
+      fullPath: '/api/public/extension/match-reply'
+      preLoaderRoute: typeof ApiPublicExtensionMatchReplyRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/accounts/$accountId/logs': {
       id: '/_authenticated/accounts/$accountId/logs'
@@ -238,6 +320,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicExtensionMatchReplyRoute: ApiPublicExtensionMatchReplyRoute,
+  ApiPublicExtensionPairRoute: ApiPublicExtensionPairRoute,
+  ApiPublicExtensionSyncItemsRoute: ApiPublicExtensionSyncItemsRoute,
+  ApiPublicExtensionTasksRoute: ApiPublicExtensionTasksRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

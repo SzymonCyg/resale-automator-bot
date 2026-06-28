@@ -73,7 +73,7 @@ export const Route = createFileRoute("/api/public/extension/sync-items")({
           views: it.views ?? 0,
           favourite_count: it.favourite_count ?? 0,
           created_at_vinted: it.created_at_vinted ?? null,
-          raw: it.raw ?? null,
+          raw: (it.raw ?? null) as never,
         }));
 
         if (rows.length > 0) {

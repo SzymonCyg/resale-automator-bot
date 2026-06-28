@@ -97,7 +97,7 @@ export const Route = createFileRoute("/api/public/extension/tasks")({
           .from("tasks")
           .update({
             status: parsed.data.status,
-            result: (parsed.data.result as object) ?? null,
+            result: (parsed.data.result ?? null) as never,
             completed_at: new Date().toISOString(),
           })
           .eq("id", task.id);
@@ -108,7 +108,7 @@ export const Route = createFileRoute("/api/public/extension/tasks")({
           type: task.type,
           status: parsed.data.status === "done" ? "ok" : "error",
           message: parsed.data.message ?? null,
-          payload: (parsed.data.result as object) ?? null,
+          payload: (parsed.data.result ?? null) as never,
         });
 
         return new Response(JSON.stringify({ ok: true }), {
