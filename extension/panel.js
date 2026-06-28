@@ -382,6 +382,7 @@ $("#runRelist").addEventListener("click", async () => {
         kind: "RELIST_ITEM",
         original: st.item,
         price: st.price,
+        currency: st.currency,
         photos,
       });
       if (r?.ok) log(`✓ ${st.item.title} — nowy ID ${r.newId}, stare usunięte`, "ok");

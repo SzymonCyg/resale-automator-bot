@@ -277,9 +277,17 @@
     );
   }
 
+  function valueId(value) {
+    return typeof value === "object" && value !== null ? value.id : value;
+  }
+
+  function valueTitle(value) {
+    return typeof value === "object" && value !== null ? value.title : value;
+  }
+
   function extractColorIds(original) {
     if (Array.isArray(original.color_ids)) return original.color_ids;
-    return [original.color1_id, original.color2_id, original.color_id].filter(Boolean);
+    return [valueId(original.color1), valueId(original.color2), original.color1_id, original.color2_id, original.color_id].filter(Boolean);
   }
 
   async function deleteOldItem(itemId) {
@@ -300,7 +308,7 @@
     throw new Error(`nowe ogłoszenie dodane, ale nie udało się usunąć starego (${last})`);
   }
 
-  async function relistItem({ original, price, photos }) {
+  async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
     const { tempUuid } = await getUploadContext();
     const photoIds = [];
@@ -311,18 +319,18 @@
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
     const item = compact({
-      id: null,
+      id: "null",
       temp_uuid: tempUuid,
       title: original.title,
       description: original.description || original.title || "",
       price: String(price),
-      currency: original.currency || original.price?.currency_code || original.price?.currency,
-      catalog_id: original.catalog_id,
-      brand_id: original.brand_id,
-      brand: original.brand_title || original.brand,
-      size_id: original.size_id,
-      status_id: original.status_id,
-      package_size_id: original.package_size_id,
+      currency: currency || original.currency || original.price?.currency_code || original.price?.currency,
+      catalog_id: original.catalog_id || valueId(original.catalog),
+      brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand),
+      brand: original.brand_title || valueTitle(original.brand_dto) || valueTitle(original.brand),
+      size_id: original.size_id || valueId(original.size),
+      status_id: original.status_id || valueId(original.status),
+      package_size_id: original.package_size_id || valueId(original.package_size),
       color_ids: extractColorIds(original),
       material_id: original.material_id,
       material_ids: original.material_ids,
@@ -331,7 +339,7 @@
       is_unisex: !!original.is_unisex,
       is_for_swap: !!original.is_for_swap,
       is_for_sell: original.is_for_sell !== false,
-      shipment_prices: original.shipment_prices || { domestic: null, international: null },
+      shipment_prices: original.shipment_prices || { domestic: "null", international: "null" },
       assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
     });
 
