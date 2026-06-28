@@ -265,12 +265,12 @@
   }
 
   async function fetchItemDetail(id) {
-    // Standardowe endpointy najpierw — item_upload/edit często zwraca 404 z HTML-em.
+    // Dotb używa /api/v2/item_upload/items/${id} (BEZ /edit) — zwraca pełny edytowalny payload
     const tries = [
+      `/api/v2/item_upload/items/${id}`,
       `/api/v2/items/${id}?localize=false`,
       `/api/v2/items/${id}`,
       `/api/v2/items/${id}/details`,
-      `/api/v2/item_upload/items/${id}/edit`,
     ];
     let lastErr;
     for (const path of tries) {
@@ -278,7 +278,7 @@
         const res = await vintedRaw(path, {});
         const text = res?.text || "";
         if (!res?.ok || text.trimStart().startsWith("<")) {
-          lastErr = new Error(`Vinted ${res?.status || "brak statusu"}: nieoczekiwana odpowiedź dla ${path}`);
+          lastErr = new Error(`Vinted ${res?.status || "brak statusu"}: HTML zamiast JSON (${path})`);
           continue;
         }
         const r = res?.json;
@@ -288,9 +288,9 @@
         lastErr = e;
       }
     }
-    // Ostatni fallback — api.vinted.{tld}
+    // Fallback przez api.vinted.{tld}
     try {
-      const r = await vintedApiHost(`/api/v2/items/${id}?localize=false`);
+      const r = await vintedApiHost(`/api/v2/item_upload/items/${id}`);
       const item = r?.item || r;
       if (item && (item.id || item.title)) return item;
     } catch (e) {
@@ -298,6 +298,7 @@
     }
     throw lastErr || new Error("Nie mogę pobrać szczegółów przedmiotu");
   }
+
 
   // Mapowanie etykiet stanu Vinted → status_id (stabilne globalnie).
   const STATUS_LABEL_TO_ID = {
@@ -404,9 +405,34 @@
     throw new Error(`nowe ogłoszenie dodane, ale nie udało się usunąć starego (${last})`);
   }
 
+  // Synchronizacja status_id <-> item_attributes[condition] (jak CZ() w Dotb)
+  function syncConditionAttr(draft) {
+    const statusId = draft.status_id;
+    const attrs = draft.item_attributes ?? [];
+    const condAttr = attrs.find((a) => a.code === "condition");
+    if (statusId && condAttr === undefined) {
+      return { ...draft, item_attributes: [...attrs, { code: "condition", ids: [statusId] }] };
+    } else if (!statusId && condAttr?.ids?.[0]) {
+      return { ...draft, status_id: condAttr.ids[0] };
+    }
+    return draft;
+  }
+
+  // Synchronizacja size_id <-> item_attributes[size] (jak NZ() w Dotb)
+  function syncSizeAttr(draft) {
+    const sizeId = draft.size_id;
+    const attrs = draft.item_attributes ?? [];
+    const sizeAttr = attrs.find((a) => a.code === "size");
+    if (sizeId && sizeAttr === undefined) {
+      return { ...draft, item_attributes: [...attrs, { code: "size", ids: [sizeId] }] };
+    } else if (!sizeId && sizeAttr?.ids?.[0]) {
+      return { ...draft, size_id: sizeAttr.ids[0] };
+    }
+    return draft;
+  }
+
   // Budowa payloadu draftu — odpowiednik funkcji yu() z referencyjnej wtyczki Dotb.
   function buildDraftPayload({ original, price, currency, photoIds, tempUuid }) {
-    const colorIds = extractColorIds(original);
     const statusId = resolveStatusId(original);
     if (!statusId) {
       throw new Error("Brak stanu przedmiotu (status_id) w danych źródłowych");
@@ -434,18 +460,18 @@
       price: Number(price),
       package_size_id: original.package_size_id || valueId(original.package_size) || null,
       shipment_prices: { domestic: null, international: null },
-      color_ids: colorIds.filter((c) => c !== null && c !== undefined),
+      color_ids: [original.color1_id, original.color2_id].filter((c) => c !== null && c !== undefined),
       assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
+      item_attributes: original.item_attributes || [],
       measurement_length: original.measurement_length ?? null,
       measurement_width: original.measurement_width ?? null,
       manufacturer: original.manufacturer ?? null,
       manufacturer_labelling: original.manufacturer_labelling ?? null,
       model: original.model ?? null,
     };
-    // Vinted nie lubi explicit nulls dla niektórych pól — usuwamy puste arraye,
-    // ale zachowujemy strukturę identyczną z referencją.
-    return draft;
+    return syncSizeAttr(syncConditionAttr(draft));
   }
+
 
   // ===== Ponowne wystawianie (3-stopniowy flow z draftami, jak Dotb) =====
   // 1) POST  api.vinted.{tld}/api/v2/photos                          → upload zdjęć (FormData)
