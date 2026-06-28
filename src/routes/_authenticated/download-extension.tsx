@@ -1,10 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { generatePairingCode, listDevices, revokeDevice } from "@/lib/vinted.functions";
+import { listDevices, revokeDevice } from "@/lib/vinted.functions";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { Download, RefreshCw, Copy, Trash2, CheckCircle2 } from "lucide-react";
+import { Download, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/download-extension")({
@@ -14,17 +13,10 @@ export const Route = createFileRoute("/_authenticated/download-extension")({
 
 function DownloadPage() {
   const qc = useQueryClient();
-  const gen = useServerFn(generatePairingCode);
   const list = useServerFn(listDevices);
   const revoke = useServerFn(revokeDevice);
   const devicesQ = useQuery({ queryKey: ["devices"], queryFn: () => list() });
 
-  const [code, setCode] = useState<{ code: string; expiresAt: string } | null>(null);
-  const genM = useMutation({
-    mutationFn: () => gen(),
-    onSuccess: (c) => setCode(c),
-    onError: (e: Error) => toast.error(e.message),
-  });
   const revokeM = useMutation({
     mutationFn: (id: string) => revoke({ data: { id } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["devices"] }),
@@ -51,7 +43,7 @@ function DownloadPage() {
       <div>
         <h1 className="font-display text-3xl font-semibold">Wtyczka Chrome</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Wtyczka działa lokalnie w Twojej przeglądarce i łączy się z panelem przez kod parowania.
+          Wtyczka loguje się tym samym kontem Google co panel — nie trzeba używać żadnych kodów parowania.
         </p>
       </div>
 
@@ -69,50 +61,26 @@ function DownloadPage() {
       </section>
 
       <section className="surface-card p-6">
-        <h2 className="font-display text-lg font-semibold">2. Sparuj wtyczkę z panelem</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Wygeneruj kod (ważny przez 10 minut) i wpisz go w popupie wtyczki.
+        <h2 className="font-display text-lg font-semibold">2. Zaloguj wtyczkę przez Google</h2>
+        <ol className="mt-4 space-y-2 text-sm text-muted-foreground">
+          <li>1. Kliknij ikonę wtyczki w pasku Chrome.</li>
+          <li>2. Wpisz URL panelu (domyślnie podpowiedziany) i kliknij <strong>Zaloguj przez panel (Google)</strong>.</li>
+          <li>3. W otwartej karcie panelu zaloguj się Googlem (jeśli nie jesteś jeszcze zalogowany).</li>
+          <li>4. Sesja zostanie automatycznie przesłana do wtyczki — popup pokaże ✓ Zalogowano.</li>
+        </ol>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Wtyczka przechowuje tylko token sesji (access + refresh). Hasło nigdy nie opuszcza Google.
         </p>
-
-        {code ? (
-          <div className="mt-5 rounded-2xl border border-primary/30 bg-primary/10 p-6 text-center">
-            <p className="text-xs uppercase tracking-widest text-primary">Kod parowania</p>
-            <p className="mt-2 font-mono text-5xl font-bold tracking-[0.4em] text-primary">
-              {code.code}
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Wygasa: {new Date(code.expiresAt).toLocaleTimeString("pl-PL")}
-            </p>
-            <div className="mt-4 flex justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(code.code);
-                  toast.success("Skopiowano");
-                }}
-              >
-                <Copy className="mr-2 h-4 w-4" /> Kopiuj
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => genM.mutate()}>
-                <RefreshCw className="mr-2 h-4 w-4" /> Nowy kod
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button onClick={() => genM.mutate()} disabled={genM.isPending} className="mt-5">
-            Wygeneruj kod parowania
-          </Button>
-        )}
       </section>
 
-      <section className="surface-card p-6">
-        <h2 className="font-display text-lg font-semibold">Twoje wtyczki</h2>
-        {devicesQ.data?.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">Żadna wtyczka nie jest sparowana.</p>
-        ) : (
+      {devicesQ.data && devicesQ.data.length > 0 && (
+        <section className="surface-card p-6">
+          <h2 className="font-display text-lg font-semibold">Wtyczki sparowane starym kodem</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Możesz je tutaj odłączyć — od wersji 0.2.0 wtyczka używa logowania Google.
+          </p>
           <div className="mt-3 divide-y divide-border">
-            {devicesQ.data?.map((d) => (
+            {devicesQ.data.map((d) => (
               <div key={d.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="h-4 w-4 text-success" />
@@ -127,8 +95,8 @@ function DownloadPage() {
               </div>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }

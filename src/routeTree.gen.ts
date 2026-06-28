@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedExtensionConnectRouteImport } from './routes/_authenticated/extension-connect'
 import { Route as AuthenticatedDownloadExtensionRouteImport } from './routes/_authenticated/download-extension'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as ApiPublicExtensionTasksRouteImport } from './routes/api/public/extension/tasks'
@@ -37,6 +38,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedExtensionConnectRoute =
+  AuthenticatedExtensionConnectRouteImport.update({
+    id: '/extension-connect',
+    path: '/extension-connect',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDownloadExtensionRoute =
   AuthenticatedDownloadExtensionRouteImport.update({
     id: '/download-extension',
@@ -100,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/download-extension': typeof AuthenticatedDownloadExtensionRoute
+  '/extension-connect': typeof AuthenticatedExtensionConnectRoute
   '/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
   '/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
@@ -114,6 +122,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/download-extension': typeof AuthenticatedDownloadExtensionRoute
+  '/extension-connect': typeof AuthenticatedExtensionConnectRoute
   '/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
   '/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
@@ -130,6 +139,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/download-extension': typeof AuthenticatedDownloadExtensionRoute
+  '/_authenticated/extension-connect': typeof AuthenticatedExtensionConnectRoute
   '/_authenticated/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
   '/_authenticated/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/_authenticated/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
@@ -146,6 +156,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dashboard'
     | '/download-extension'
+    | '/extension-connect'
     | '/accounts/$accountId/auto-bump'
     | '/accounts/$accountId/auto-reply'
     | '/accounts/$accountId/items'
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dashboard'
     | '/download-extension'
+    | '/extension-connect'
     | '/accounts/$accountId/auto-bump'
     | '/accounts/$accountId/auto-reply'
     | '/accounts/$accountId/items'
@@ -175,6 +187,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/dashboard'
     | '/_authenticated/download-extension'
+    | '/_authenticated/extension-connect'
     | '/_authenticated/accounts/$accountId/auto-bump'
     | '/_authenticated/accounts/$accountId/auto-reply'
     | '/_authenticated/accounts/$accountId/items'
@@ -217,6 +230,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/extension-connect': {
+      id: '/_authenticated/extension-connect'
+      path: '/extension-connect'
+      fullPath: '/extension-connect'
+      preLoaderRoute: typeof AuthenticatedExtensionConnectRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/download-extension': {
       id: '/_authenticated/download-extension'
@@ -294,6 +314,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDownloadExtensionRoute: typeof AuthenticatedDownloadExtensionRoute
+  AuthenticatedExtensionConnectRoute: typeof AuthenticatedExtensionConnectRoute
   AuthenticatedAccountsAccountIdAutoBumpRoute: typeof AuthenticatedAccountsAccountIdAutoBumpRoute
   AuthenticatedAccountsAccountIdAutoReplyRoute: typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   AuthenticatedAccountsAccountIdItemsRoute: typeof AuthenticatedAccountsAccountIdItemsRoute
@@ -303,6 +324,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDownloadExtensionRoute: AuthenticatedDownloadExtensionRoute,
+  AuthenticatedExtensionConnectRoute: AuthenticatedExtensionConnectRoute,
   AuthenticatedAccountsAccountIdAutoBumpRoute:
     AuthenticatedAccountsAccountIdAutoBumpRoute,
   AuthenticatedAccountsAccountIdAutoReplyRoute:
@@ -328,13 +350,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
