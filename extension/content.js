@@ -89,13 +89,14 @@
   }
 
   function pageFetch(path, init = {}) {
-    const { skipXRequestedWith, csrfToken, ...fetchInit } = init;
+    const { skipXRequestedWith, csrfToken, useApiHost, ...fetchInit } = init;
     return bridgeRequest("FETCH", {
       path,
       csrfToken,
       init: {
         ...fetchInit,
         skipXRequestedWith,
+        useApiHost: !!useApiHost,
         headers: buildHeaders(init, !!init.body),
       },
     });
@@ -112,8 +113,14 @@
 
   async function vintedApi(path, init = {}) {
     const res = await pageFetch(path, init);
-    if (!res.ok) throw new Error(`Vinted ${res.status}${res.text ? `: ${res.text.slice(0, 120)}` : ""}`);
+    if (!res.ok) throw new Error(`Vinted ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
     return res.json;
+  }
+
+  // Wariant uderzający w api.vinted.{tld} — używamy do całego flow uploadu i draftów,
+  // zgodnie z referencyjną wtyczką (Dotb), gdzie www.vinted.* zwraca 400/422 dla item_upload.
+  async function vintedApiHost(path, init = {}) {
+    return vintedApi(path, { ...init, useApiHost: true });
   }
 
   async function vintedRaw(path, init = {}) {
