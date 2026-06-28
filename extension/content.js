@@ -397,6 +397,15 @@
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
+    const statusId = resolveStatusId(original);
+    if (!statusId) {
+      throw new Error("Brak stanu przedmiotu (status_id) — otwórz ogłoszenie ręcznie, ustaw stan i spróbuj ponownie");
+    }
+    const conditionIds = (Array.isArray(original.item_attributes)
+      ? original.item_attributes.find((a) => a?.code === "condition")
+      : null)?.ids || extractConditionIds(original);
+    const safeConditionIds = (Array.isArray(conditionIds) && conditionIds.length) ? conditionIds : [statusId];
+
     const item = cleanPayload({
       id: null,
       temp_uuid: tempUuid,
@@ -408,14 +417,12 @@
       brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand),
       brand: original.brand_title || valueTitle(original.brand_dto) || valueTitle(original.brand),
       size_id: original.size_id || valueId(original.size),
-      status_id: original.status_id || valueId(original.status),
+      status_id: statusId,
       package_size_id: original.package_size_id || valueId(original.package_size),
       color_ids: extractColorIds(original),
       material_id: original.material_id,
       material_ids: original.material_ids,
-      item_attributes: Array.isArray(original.item_attributes) && original.item_attributes.length
-        ? original.item_attributes
-        : [{ code: "condition", ids: extractConditionIds(original) }],
+      item_attributes: [{ code: "condition", ids: safeConditionIds }],
       isbn: original.isbn,
       is_unisex: !!original.is_unisex,
       is_for_swap: !!original.is_for_swap,
