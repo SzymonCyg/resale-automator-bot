@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.7.0";
+  const CONTENT_VERSION = "0.7.1";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -377,8 +377,6 @@
 
   async function deleteOldItem(itemId) {
     const attempts = [
-      { path: `/api/v2/items/${itemId}`, init: { method: "DELETE", useApiHost: true } },
-      { path: `/api/v2/items/${itemId}/delete`, init: { method: "POST", body: JSON.stringify({}), useApiHost: true } },
       { path: `/api/v2/items/${itemId}`, init: { method: "DELETE" } },
       { path: `/api/v2/items/${itemId}/delete`, init: { method: "POST", body: JSON.stringify({}) } },
     ];
