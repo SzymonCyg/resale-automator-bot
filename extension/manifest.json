@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Vinted Manager Helper",
+  "version": "0.1.0",
+  "description": "Łączy Twój panel Vinted Manager z kontem Vinted w przeglądarce.",
+  "permissions": ["storage", "alarms", "activeTab", "tabs", "scripting"],
+  "host_permissions": [
+    "https://*.vinted.pl/*",
+    "https://*.vinted.fr/*",
+    "https://*.vinted.de/*",
+    "https://*.vinted.es/*",
+    "https://*.vinted.it/*",
+    "https://*.vinted.nl/*",
+    "https://*.vinted.cz/*",
+    "https://*.vinted.sk/*",
+    "https://*.vinted.co.uk/*",
+    "https://*.lovable.app/*",
+    "https://*.lovable.dev/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Vinted Manager" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.vinted.pl/*",
+        "https://*.vinted.fr/*",
+        "https://*.vinted.de/*",
+        "https://*.vinted.es/*",
+        "https://*.vinted.it/*",
+        "https://*.vinted.nl/*",
+        "https://*.vinted.cz/*",
+        "https://*.vinted.sk/*",
+        "https://*.vinted.co.uk/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
