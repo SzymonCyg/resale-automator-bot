@@ -70,7 +70,7 @@
         const headers = new Headers();
         if (csrf) headers.set("X-CSRF-Token", csrf);
         if (anon) headers.set("X-Anon-Id", decodeURIComponent(anon));
-        headers.set("X-Requested-With", "XMLHttpRequest");
+        headers.set("X-Enable-Multiple-Size-Groups", "true");
         headers.set("Accept", "application/json, text/plain, */*");
         headers.set("Locale", document.documentElement.lang || navigator.language || "pl");
 
@@ -109,6 +109,7 @@
         headers.set("X-Upload-Form", "true");
         headers.set("X-Enable-Dynamic-Attribute-Condition", "true");
         headers.set("X-Enable-Dynamic-Attribute-Video-Game-Rating", "true");
+        headers.set("X-Enable-Multiple-Size-Groups", "true");
       }
 
       const response = await fetch(url.toString(), {
