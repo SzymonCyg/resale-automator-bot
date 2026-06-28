@@ -102,14 +102,18 @@
     });
   }
 
-  function pageUploadPhoto(dataUrl, tempUuid, csrfToken) {
+  function pageUploadPhoto(dataUrl, csrfToken) {
+    const photoUuid = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     return bridgeRequest("UPLOAD_PHOTO", {
       dataUrl,
-      tempUuid,
+      tempUuid: photoUuid,
       csrfToken,
       filename: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
     }, 60000);
   }
+
 
   async function vintedApi(path, init = {}) {
     const res = await pageFetch(path, init);
