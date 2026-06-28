@@ -61,16 +61,28 @@
         if (anon) headers.set("X-Anon-Id", decodeURIComponent(anon));
         if (accessToken) headers.set("Authorization", `Bearer ${decodeURIComponent(accessToken)}`);
         headers.set("X-Requested-With", "XMLHttpRequest");
+        headers.set("X-Upload-Form", "true");
+        headers.set("X-Money-Object", "true");
+        headers.set("Accept", "application/json, text/plain, */*");
+        headers.set("Locale", document.documentElement.lang || navigator.language || "pl");
 
-        const response = await fetch(new URL("/api/v2/photos", window.location.origin).toString(), {
-          method: "POST",
-          headers,
-          credentials: "include",
-          mode: "cors",
-          cache: "no-store",
-          referrer: new URL("/items/new", window.location.origin).toString(),
-          body: form,
-        });
+        // Vinted blokuje /api/v2/photos zwykłym 403 (code 106 access_denied);
+        // właściwy endpoint dla web flow to /web/api/v2/photos.
+        const endpoints = ["/web/api/v2/photos", "/api/v2/photos"];
+        let response = null;
+        for (const path of endpoints) {
+          response = await fetch(new URL(path, window.location.origin).toString(), {
+            method: "POST",
+            headers,
+            credentials: "include",
+            mode: "cors",
+            cache: "no-store",
+            referrer: new URL("/items/new", window.location.origin).toString(),
+            body: form,
+          });
+          if (response.ok) break;
+          if (response.status !== 403 && response.status !== 404) break;
+        }
 
         window.postMessage(
           { source: "VM_PAGE_BRIDGE", id: msg.id, ok: true, response: await toPayload(response) },
