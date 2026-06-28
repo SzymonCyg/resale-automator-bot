@@ -33,24 +33,47 @@
     return me?.user;
   }
 
-  async function fetchMyItems() {
-    const me = await getMe();
-    if (!me) throw new Error("Niezalogowany");
-    const items = await vintedApi(`/api/v2/users/${me.id}/items?per_page=200`);
-    const list = (items?.items ?? []).map((it) => ({
+  async function fetchRawItems(userId) {
+    // Vinted ma kilka endpointów — próbujemy po kolei.
+    const tries = [
+      `/api/v2/wardrobe/${userId}/items?status=active&per_page=200`,
+      `/api/v2/users/${userId}/items?per_page=200`,
+      `/api/v2/wardrobe-items?user_id=${userId}&per_page=200`,
+    ];
+    let lastErr;
+    for (const path of tries) {
+      try {
+        const r = await vintedApi(path);
+        const arr = r?.items ?? r?.wardrobe_items ?? [];
+        if (Array.isArray(arr) && arr.length >= 0) return arr;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Brak działającego endpointu /items");
+  }
+
+  function normalize(it) {
+    return {
       id: it.id,
       title: it.title,
-      brand: it.brand_title,
-      size_title: it.size_title,
+      brand: it.brand_title || it.brand?.title,
+      size_title: it.size_title || it.size?.title,
       price: Number(it.price?.amount ?? it.price ?? 0),
       currency: it.price?.currency_code ?? it.currency,
       status: it.status,
-      url: it.url,
+      url: it.url || (it.path ? `https://${host}${it.path}` : null),
       photo_url: it.photo?.url ?? it.photos?.[0]?.url ?? null,
       views: it.view_count ?? 0,
       favourite_count: it.favourite_count ?? 0,
-    }));
-    return { username: me.login, userId: me.id, items: list };
+    };
+  }
+
+  async function fetchMyItems() {
+    const me = await getMe();
+    if (!me) throw new Error("Niezalogowany na vinted");
+    const raw = await fetchRawItems(me.id);
+    return { username: me.login, userId: me.id, items: raw.map(normalize) };
   }
 
   async function fetchItemDetail(id) {
@@ -58,8 +81,7 @@
     return r?.item || null;
   }
 
-  // Próba ponownego wystawienia: 1) upload zdjęć, 2) draft item, 3) publish, 4) usuń stary.
-  // Endpointy Vinted bywają zmienne — funkcja best-effort z logiem.
+  // ===== Ponowne wystawianie =====
   async function uploadPhotoDataUrl(dataUrl) {
     const blob = await (await fetch(dataUrl)).blob();
     const fd = new FormData();
@@ -78,13 +100,11 @@
   }
 
   async function relistItem({ original, price, photos }) {
-    // Upload nowych zdjęć
     const photoIds = [];
     for (const p of photos) {
       const id = await uploadPhotoDataUrl(p);
       if (id) photoIds.push(id);
     }
-    // Stwórz nowy item z metadanymi oryginału
     const body = {
       item: {
         title: original.title,
@@ -109,31 +129,12 @@
       body: JSON.stringify(body),
     });
     const newId = created?.item?.id;
-    // Usuń stary
     try {
       await vintedRaw(`/api/v2/items/${original.id}`, { method: "DELETE" });
     } catch (e) {
-      console.warn("[Vinted Manager] delete old fail", e);
+      console.warn("[VM] delete old fail", e);
     }
     return newId;
-  }
-
-  // ===== Auto-bump (z poprzedniej wersji) =====
-  async function runBump() {
-    try {
-      const me = await getMe();
-      const items = await vintedApi(`/api/v2/users/${me.id}/items?per_page=200`);
-      for (const it of items?.items ?? []) {
-        try {
-          await vintedApi(`/api/v2/items/${it.id}/push_ups`, { method: "POST", body: "{}" });
-          await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
-        } catch (e) {
-          console.warn("[VM] bump fail", it.id, e.message);
-        }
-      }
-    } catch (e) {
-      console.warn("[VM] bump err", e);
-    }
   }
 
   // ===== Auto-reply =====
@@ -172,32 +173,30 @@
 
   // ===== Sync z panelem =====
   async function syncToPanel() {
-    try {
-      const { username, userId, items } = await fetchMyItems();
-      await chrome.runtime.sendMessage({
-        kind: "SYNC_ITEMS",
-        payload: {
-          vintedUserId: String(userId),
-          vintedUsername: username,
-          country,
-          items: items.map((it) => ({
-            vinted_item_id: String(it.id),
-            title: it.title,
-            price: it.price,
-            currency: it.currency,
-            brand: it.brand,
-            size_title: it.size_title,
-            status: it.status,
-            url: it.url,
-            photo_url: it.photo_url,
-            views: it.views,
-            favourite_count: it.favourite_count,
-          })),
-        },
-      });
-    } catch (e) {
-      console.warn("[VM] sync err", e);
-    }
+    const { username, userId, items } = await fetchMyItems();
+    const resp = await chrome.runtime.sendMessage({
+      kind: "SYNC_ITEMS",
+      payload: {
+        vintedUserId: String(userId),
+        vintedUsername: username,
+        country,
+        items: items.map((it) => ({
+          vinted_item_id: String(it.id),
+          title: it.title,
+          price: it.price,
+          currency: it.currency,
+          brand: it.brand,
+          size_title: it.size_title,
+          status: it.status,
+          url: it.url,
+          photo_url: it.photo_url,
+          views: it.views,
+          favourite_count: it.favourite_count,
+        })),
+      },
+    });
+    if (!resp?.ok) throw new Error(resp?.error || "sync fail");
+    return { count: items.length, username, ...resp.r };
   }
 
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
@@ -208,8 +207,8 @@
         else if (msg.kind === "RELIST_ITEM") {
           const newId = await relistItem(msg);
           sendResponse({ ok: true, newId });
-        } else if (msg.kind === "RUN_BUMP") { await runBump(); sendResponse({ ok: true }); }
-        else if (msg.kind === "RUN_REPLIES") { await runReplies(); sendResponse({ ok: true }); }
+        } else if (msg.kind === "RUN_REPLIES") { await runReplies(); sendResponse({ ok: true }); }
+        else if (msg.kind === "SYNC_NOW") sendResponse({ ok: true, ...(await syncToPanel()) });
       } catch (e) {
         sendResponse({ ok: false, error: e.message });
       }
@@ -217,8 +216,69 @@
     return true;
   });
 
-  syncToPanel();
-  setInterval(syncToPanel, 10 * 60 * 1000);
+  // Sync w tle (best-effort, błędy ciche)
+  syncToPanel().catch((e) => console.warn("[VM] sync err", e));
+  setInterval(() => syncToPanel().catch(() => {}), 10 * 60 * 1000);
   runReplies();
   setInterval(runReplies, 5 * 60 * 1000);
+
+  // ===================================================================
+  // SIDEBAR DRAWER — pasek z prawej + rozsuwany panel (iframe panel.html)
+  // ===================================================================
+  function injectSidebar() {
+    if (document.getElementById("vm-sidebar-root")) return;
+    const root = document.createElement("div");
+    root.id = "vm-sidebar-root";
+    root.innerHTML = `
+      <style>
+        #vm-sidebar-root { position: fixed; top:0; right:0; height:100vh; z-index: 2147483646; font-family:-apple-system,system-ui,sans-serif; }
+        #vm-handle {
+          position:absolute; top:50%; right:0; transform:translateY(-50%);
+          width:32px; height:84px; background:#5eead4; color:#0b1220;
+          border-radius:8px 0 0 8px; display:flex; align-items:center; justify-content:center;
+          cursor:pointer; box-shadow:-2px 2px 8px rgba(0,0,0,.25); font-size:18px; font-weight:700;
+          transition:right .25s ease;
+        }
+        #vm-handle:hover { background:#7af0db; }
+        #vm-drawer {
+          position:absolute; top:0; right:-560px; width:560px; max-width:95vw; height:100vh;
+          background:#0f1420; box-shadow:-4px 0 16px rgba(0,0,0,.5);
+          transition:right .25s ease; display:flex; flex-direction:column;
+        }
+        #vm-sidebar-root.open #vm-drawer { right:0; }
+        #vm-sidebar-root.open #vm-handle { right:560px; }
+        #vm-drawer iframe { flex:1; width:100%; border:0; background:#0f1420; }
+        @media (max-width: 640px) {
+          #vm-drawer { width:95vw; right:-95vw; }
+          #vm-sidebar-root.open #vm-handle { right:95vw; }
+        }
+      </style>
+      <div id="vm-handle" title="Vinted Manager">
+        <span id="vm-arrow">‹</span>
+      </div>
+      <div id="vm-drawer"></div>
+    `;
+    document.documentElement.appendChild(root);
+
+    const drawer = root.querySelector("#vm-drawer");
+    const handle = root.querySelector("#vm-handle");
+    const arrow = root.querySelector("#vm-arrow");
+    let loaded = false;
+    handle.addEventListener("click", () => {
+      const open = root.classList.toggle("open");
+      arrow.textContent = open ? "›" : "‹";
+      if (open && !loaded) {
+        const iframe = document.createElement("iframe");
+        iframe.src = chrome.runtime.getURL("panel.html?embedded=1");
+        drawer.appendChild(iframe);
+        loaded = true;
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", injectSidebar);
+  } else {
+    injectSidebar();
+  }
 })();
