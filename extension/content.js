@@ -258,17 +258,47 @@
   }
 
   async function fetchItemDetail(id) {
-    const tries = [`/api/v2/items/${id}/details`, `/api/v2/items/${id}?localize=false`, `/api/v2/items/${id}`];
+    // /api/v2/item_upload/items/{id}/edit zwraca pełny payload edytowalny
+    // razem ze status_id, catalog_id, brand_id itd. — używamy go w pierwszej kolejności,
+    // bo /api/v2/items/{id} zwraca "status" jako etykietę tekstową i Vinted odrzuca
+    // POST z validation_error: [:item, :status_id] = "".
+    const tries = [
+      `/api/v2/item_upload/items/${id}/edit`,
+      `/api/v2/items/${id}/details`,
+      `/api/v2/items/${id}?localize=false`,
+      `/api/v2/items/${id}`,
+    ];
     let lastErr;
     for (const path of tries) {
       try {
         const r = await vintedApi(path);
-        return r?.item || r;
+        const item = r?.item || r;
+        if (item && (item.id || item.title)) return item;
       } catch (e) {
         lastErr = e;
       }
     }
     throw lastErr || new Error("Nie mogę pobrać szczegółów przedmiotu");
+  }
+
+  // Mapowanie etykiet stanu Vinted → status_id (stabilne globalnie).
+  const STATUS_LABEL_TO_ID = {
+    "new with tags": 1, "nowy z metką": 1, "nowy z metka": 1, "neu mit etikett": 1, "neuf avec étiquette": 1,
+    "new without tags": 2, "nowy bez metki": 2, "neu ohne etikett": 2, "neuf sans étiquette": 2,
+    "very good": 6, "bardzo dobry": 6, "sehr gut": 6, "très bon état": 6,
+    "good": 3, "dobry": 3, "gut": 3, "bon état": 3,
+    "satisfactory": 4, "zadowalający": 4, "zadowalajacy": 4, "befriedigend": 4, "satisfaisant": 4,
+  };
+
+  function resolveStatusId(original) {
+    const direct = original.status_id
+      || valueId(original.status)
+      || original.condition_id
+      || valueId(original.condition);
+    if (direct) return direct;
+    const label = String(valueTitle(original.status) || original.status || original.condition || "").trim().toLowerCase();
+    if (label && STATUS_LABEL_TO_ID[label]) return STATUS_LABEL_TO_ID[label];
+    return null;
   }
 
   // ===== Ponowne wystawianie =====
@@ -367,6 +397,15 @@
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
+    const statusId = resolveStatusId(original);
+    if (!statusId) {
+      throw new Error("Brak stanu przedmiotu (status_id) — otwórz ogłoszenie ręcznie, ustaw stan i spróbuj ponownie");
+    }
+    const conditionIds = (Array.isArray(original.item_attributes)
+      ? original.item_attributes.find((a) => a?.code === "condition")
+      : null)?.ids || extractConditionIds(original);
+    const safeConditionIds = (Array.isArray(conditionIds) && conditionIds.length) ? conditionIds : [statusId];
+
     const item = cleanPayload({
       id: null,
       temp_uuid: tempUuid,
@@ -378,14 +417,12 @@
       brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand),
       brand: original.brand_title || valueTitle(original.brand_dto) || valueTitle(original.brand),
       size_id: original.size_id || valueId(original.size),
-      status_id: original.status_id || valueId(original.status),
+      status_id: statusId,
       package_size_id: original.package_size_id || valueId(original.package_size),
       color_ids: extractColorIds(original),
       material_id: original.material_id,
       material_ids: original.material_ids,
-      item_attributes: Array.isArray(original.item_attributes) && original.item_attributes.length
-        ? original.item_attributes
-        : [{ code: "condition", ids: extractConditionIds(original) }],
+      item_attributes: [{ code: "condition", ids: safeConditionIds }],
       isbn: original.isbn,
       is_unisex: !!original.is_unisex,
       is_for_swap: !!original.is_for_swap,
