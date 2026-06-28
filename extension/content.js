@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.7.6";
+  const CONTENT_VERSION = "0.8.0";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -89,7 +89,6 @@
     });
   }
 
-  // Każde zdjęcie dostaje własne unikalne UUID (jak jv() w Dotb)
   function pageUploadPhoto(dataUrl, csrfToken) {
     return bridgeRequest("UPLOAD_PHOTO", {
       dataUrl,
@@ -101,7 +100,7 @@
 
   async function vintedApi(path, init = {}) {
     const res = await pageFetch(path, init);
-    if (!res.ok) throw new Error(`Vinted ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
+    if (!res.ok) throw new Error(`Vinted ${res.status}${res.text ? `: ${res.text.slice(0, 250)}` : ""}`);
     return res.json;
   }
 
@@ -236,7 +235,6 @@
     return { username: me.login, userId: me.id, items: raw.map(normalize) };
   }
 
-  // Dotb: bh(id) = GET /api/v2/item_upload/items/{id} — BEZ /edit
   async function fetchItemDetail(id) {
     const tries = [
       `/api/v2/item_upload/items/${id}`,
@@ -274,14 +272,12 @@
   function resolveStatusId(original) {
     const direct = original.status_id || valueId(original.status) || original.condition_id || valueId(original.condition);
     if (direct) return direct;
-    // Fallback z item_attributes[condition]
     const condAttr = (original.item_attributes || []).find(a => a.code === "condition");
     if (condAttr?.ids?.[0]) return condAttr.ids[0];
     const label = String(valueTitle(original.status) || original.status || original.condition || "").trim().toLowerCase();
     return STATUS_LABEL_TO_ID[label] || null;
   }
 
-  // Synchronizacja status_id <-> item_attributes[condition] — jak CZ() w Dotb
   function syncConditionAttr(draft) {
     const statusId = draft.status_id;
     const attrs = draft.item_attributes ?? [];
@@ -291,7 +287,6 @@
     return draft;
   }
 
-  // Synchronizacja size_id <-> item_attributes[size] — jak NZ() w Dotb
   function syncSizeAttr(draft) {
     const sizeId = draft.size_id;
     const attrs = draft.item_attributes ?? [];
@@ -299,6 +294,14 @@
     if (sizeId && sizeAttr === undefined) return { ...draft, item_attributes: [...attrs, { code: "size", ids: [sizeId] }] };
     if (!sizeId && sizeAttr?.ids?.[0]) return { ...draft, size_id: sizeAttr.ids[0] };
     return draft;
+  }
+
+  async function uploadPhotoDataUrl(dataUrl, csrfToken) {
+    const res = await pageUploadPhoto(dataUrl, csrfToken);
+    if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
+    const id = res.json?.photo?.id ?? res.json?.id;
+    if (!id) throw new Error("Vinted nie zwrócił ID zdjęcia");
+    return id;
   }
 
   async function deleteOldItem(itemId) {
@@ -317,19 +320,11 @@
     throw new Error(`nie udało się usunąć starego (${last})`);
   }
 
-  async function uploadPhotoDataUrl(dataUrl, csrfToken) {
-    const res = await pageUploadPhoto(dataUrl, csrfToken);
-    if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
-    const id = res.json?.photo?.id ?? res.json?.id;
-    if (!id) throw new Error("Vinted nie zwrócił ID zdjęcia");
-    return id;
-  }
-
-  // Buduje draft — jak ab()/yu() w Dotb, z syncConditionAttr + syncSizeAttr
-  function buildDraft({ original, price, currency, photoIds, tempUuid }) {
+  function buildDraft({ original, price, currency, photoIds, tempUuid, assignedPhotos }) {
     const statusId = resolveStatusId(original);
-    if (!statusId) throw new Error("Brak stanu przedmiotu (status_id)");
-    const finalCurrency = currency || original.currency || original.price?.currency_code || "PLN";
+    if (!statusId) throw new Error("Brak stanu przedmiotu (status_id) w danych źródłowych");
+    const finalCurrency = currency || original.currency || original.price?.currency_code || original.price?.currency || "PLN";
+    const photos = assignedPhotos || photoIds.map(id => ({ id, orientation: 0 }));
     const draft = {
       id: null,
       currency: finalCurrency,
@@ -348,9 +343,8 @@
       price: Number(price),
       package_size_id: original.package_size_id || valueId(original.package_size) || null,
       shipment_prices: { domestic: null, international: null },
-      // Dotb: color_ids z color1_id i color2_id
       color_ids: [original.color1_id, original.color2_id].filter(c => c != null),
-      assigned_photos: photoIds.map(id => ({ id, orientation: 0 })),
+      assigned_photos: photos,
       item_attributes: original.item_attributes || [],
       measurement_length: original.measurement_length ?? null,
       measurement_width: original.measurement_width ?? null,
@@ -361,18 +355,10 @@
     return syncSizeAttr(syncConditionAttr(draft));
   }
 
-  // ===== Ponowne wystawianie — flow identyczny z Dotb =====
-  // 1) POST /api/v2/photos (same-origin)          → upload zdjęć
-  // 2) POST /api/v2/item_upload/drafts (same-origin) → stworzenie draftu
-  // 3) GET  /api/v2/item_upload/items/{draftId}   → odświeżenie draftu (Ku())
-  // 4) POST /api/v2/item_upload/drafts/{id}/completion → publikacja (nde/v9())
-  // 5) DELETE starego ogłoszenia
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
     const csrfToken = readCsrfToken();
-    const draftUuid = newUuid(); // jeden UUID dla całego flow (upload_session_id)
 
-    // 1) Upload zdjęć — każde dostaje własne UUID
     const photoIds = [];
     for (const p of photos) {
       const id = await uploadPhotoDataUrl(p, csrfToken);
@@ -380,39 +366,45 @@
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć");
 
-    // 2) Stworzenie draftu — z draftUuid
-    const draft = buildDraft({ original, price, currency, photoIds, tempUuid: draftUuid });
+    const draft = buildDraft({ original, price, currency, photoIds });
     const draftRes = await vintedApi(`/api/v2/item_upload/drafts`, {
       method: "POST",
       csrfToken,
-      body: JSON.stringify({ draft, feedback_id: null, parcel: null, upload_session_id: draftUuid }),
+      body: JSON.stringify({ draft, feedback_id: null, parcel: null, upload_session_id: draft.temp_uuid }),
     });
     const createdDraft = draftRes?.draft || draftRes;
     const draftId = createdDraft?.id;
     if (!draftId) throw new Error("Vinted nie zwrócił ID draftu");
 
-    // 3) Odświeżenie draftu (jak Ku() w Dotb)
-    await new Promise(r => setTimeout(r, 500));
-    let refreshedDraft;
+    await new Promise(r => setTimeout(r, 2500));
+    let refreshedDraft = createdDraft;
     try {
       const r = await vintedRaw(`/api/v2/item_upload/items/${draftId}`, {});
-      refreshedDraft = r?.json?.item || r?.json || createdDraft;
-    } catch {
-      refreshedDraft = createdDraft;
-    }
+      if (r?.ok && r?.json) refreshedDraft = r.json.item || r.json;
+    } catch {}
 
-    // 4) Publikacja — TEN SAM draftUuid!
-    const publishDraft = buildDraft({ original: { ...original, ...refreshedDraft }, price, currency, photoIds, tempUuid: draftUuid });
+    const draftPhotos = Array.isArray(refreshedDraft?.photos) && refreshedDraft.photos.length
+      ? refreshedDraft.photos.map(p => ({ id: p.id, orientation: p.orientation ?? 0 }))
+      : photoIds.map(id => ({ id, orientation: 0 }));
+
+    const publishDraft = buildDraft({
+      original: { ...original, ...refreshedDraft },
+      price,
+      currency,
+      photoIds,
+      tempUuid: refreshedDraft?.temp_uuid || newUuid(),
+      assignedPhotos: draftPhotos,
+    });
     publishDraft.id = draftId;
+
     const completedRes = await vintedApi(`/api/v2/item_upload/drafts/${draftId}/completion`, {
       method: "POST",
       csrfToken,
-      body: JSON.stringify({ draft: publishDraft, feedback_id: null, parcel: null, push_up: false, upload_session_id: draftUuid }),
+      body: JSON.stringify({ draft: publishDraft, feedback_id: null, parcel: null, push_up: false, upload_session_id: publishDraft.temp_uuid }),
     });
     const newId = completedRes?.item?.id ?? completedRes?.id;
     if (!newId) throw new Error("Vinted przyjął draft, ale nie zwrócił ID opublikowanego ogłoszenia");
 
-    // 5) Usunięcie starego
     let deletedOld = false, deleteError = null;
     try { await deleteOldItem(original.id); deletedOld = true; }
     catch (e) { deleteError = e?.message || String(e); }
@@ -420,7 +412,6 @@
     return { newId, deletedOld, deleteError };
   }
 
-  // ===== Auto-reply =====
   function matchRule(text, rule) {
     if (!text || !rule?.pattern) return false;
     const t = text.toLowerCase(), p = rule.pattern.toLowerCase();
@@ -517,9 +508,6 @@
     })
     .catch(() => {});
 
-  // ===================================================================
-  // SIDEBAR DRAWER
-  // ===================================================================
   function injectSidebar() {
     if (document.getElementById("vm-sidebar-root")) return;
     const root = document.createElement("div");
