@@ -40,6 +40,10 @@
     return document.querySelector('meta[name="csrf-token"]')?.content || readCsrfTokenFromText(document.documentElement.innerHTML);
   }
 
+  function newUuid() {
+    return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   function buildHeaders(init = {}, hasBody = false) {
     const csrf = init.csrfToken || readCsrfToken();
     const anon = getCookie("anon_id") || getCookie("anonymous-locale") || "";
@@ -279,14 +283,9 @@
       || text.match(/"uploadSessionId"\s*:\s*"([^"]+)"/i)?.[1]
       || text.match(/uploadSessionId["\\:]+([^"\\]+)["\\]?/i)?.[1];
     const csrfToken = readCsrfTokenFromText(text) || readCsrfToken();
-    const tempUuid = text.match(/"tempUuid"\s*:\s*"([^"\\]+)"/i)?.[1]
-      || text.match(/"temp_uuid"\s*:\s*"([^"\\]+)"/i)?.[1]
-      || text.match(/tempUuid\s*[:=]\s*["']([^"']+)["']/i)?.[1]
-      || crypto.randomUUID?.();
     if (!uploadSessionId) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak uploadSessionId)");
-    if (!tempUuid) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak tempUuid)");
     if (!csrfToken) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak CSRF tokenu)");
-    return { uploadSessionId, tempUuid, csrfToken };
+    return { uploadSessionId, csrfToken };
   }
 
   async function uploadPhotoDataUrl(dataUrl, tempUuid, csrfToken) {
@@ -359,16 +358,17 @@
 
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
-    const { uploadSessionId, tempUuid, csrfToken } = await getUploadContext();
+    const { uploadSessionId, csrfToken } = await getUploadContext();
     const photoIds = [];
     for (const p of photos) {
-      const id = await uploadPhotoDataUrl(p, tempUuid, csrfToken);
+      const id = await uploadPhotoDataUrl(p, newUuid(), csrfToken);
       if (id) photoIds.push(id);
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
     const item = cleanPayload({
-      temp_uuid: tempUuid,
+      id: null,
+      temp_uuid: newUuid(),
       title: original.title,
       description: original.description || original.title || "",
       price: Number(price),
