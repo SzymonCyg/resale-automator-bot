@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Vinted Manager Helper",
-  "version": "0.1.0",
-  "description": "Łączy Twój panel Vinted Manager z kontem Vinted w przeglądarce.",
+  "version": "0.2.0",
+  "description": "Łączy Twój panel Vinted Manager z kontem Vinted w przeglądarce. Logowanie przez Google.",
   "permissions": ["storage", "alarms", "activeTab", "tabs", "scripting"],
   "host_permissions": [
     "https://*.vinted.pl/*",
@@ -15,8 +15,16 @@
     "https://*.vinted.sk/*",
     "https://*.vinted.co.uk/*",
     "https://*.lovable.app/*",
-    "https://*.lovable.dev/*"
+    "https://*.lovable.dev/*",
+    "https://*.supabase.co/*"
   ],
+  "externally_connectable": {
+    "matches": [
+      "https://*.lovable.app/*",
+      "https://*.lovable.dev/*",
+      "http://localhost/*"
+    ]
+  },
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "Vinted Manager" },
   "content_scripts": [

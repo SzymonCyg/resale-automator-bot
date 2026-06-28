@@ -1,48 +1,40 @@
 const $ = (id) => document.getElementById(id);
+const DEFAULT_PANEL_URL = "https://resale-automator-bot.lovable.app";
 
 async function refresh() {
-  const { deviceToken, panelUrl } = await chrome.storage.local.get(["deviceToken", "panelUrl"]);
-  if (deviceToken) {
-    $("unpaired").style.display = "none";
-    $("paired").style.display = "block";
-    $("pairedStatus").textContent = `✓ Sparowane z ${panelUrl}`;
+  const status = await chrome.runtime.sendMessage({ kind: "GET_STATUS" });
+  if (status?.signedIn) {
+    $("signedOut").style.display = "none";
+    $("signedIn").style.display = "block";
+    const who = status.user?.email ?? status.user?.id ?? "konto Google";
+    $("signedInStatus").textContent = `✓ Zalogowano jako ${who}`;
   } else {
-    $("unpaired").style.display = "block";
-    $("paired").style.display = "none";
-    if (panelUrl) $("panelUrl").value = panelUrl;
+    $("signedOut").style.display = "block";
+    $("signedIn").style.display = "none";
+    $("panelUrl").value = status?.panelUrl || DEFAULT_PANEL_URL;
   }
 }
 
-$("pair").addEventListener("click", async () => {
-  const panelUrl = $("panelUrl").value.trim().replace(/\/$/, "");
-  const code = $("code").value.trim().toUpperCase();
+$("signin").addEventListener("click", async () => {
+  const panelUrl = ($("panelUrl").value.trim() || DEFAULT_PANEL_URL).replace(/\/$/, "");
+  await chrome.storage.local.set({ panelUrl });
+  const url = `${panelUrl}/extension-connect?extId=${chrome.runtime.id}`;
+  await chrome.tabs.create({ url });
   const msg = $("msg");
-  msg.className = "status";
-  msg.textContent = "Parowanie...";
-  try {
-    const res = await fetch(`${panelUrl}/api/public/extension/pair`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code,
-        label: "Chrome — " + navigator.platform,
-        userAgent: navigator.userAgent,
-      }),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    const { deviceToken } = await res.json();
-    await chrome.storage.local.set({ deviceToken, panelUrl });
-    msg.className = "status ok";
-    msg.textContent = "Sparowano!";
-    refresh();
-  } catch (e) {
-    msg.className = "status err";
-    msg.textContent = e.message;
-  }
+  msg.className = "status ok";
+  msg.textContent = "Otwarto panel — zaloguj się i wróć tutaj.";
+  // Refresh popup state when storage updates (session arrives from panel)
+  const listener = (changes) => {
+    if (changes.session) {
+      chrome.storage.onChanged.removeListener(listener);
+      refresh();
+    }
+  };
+  chrome.storage.onChanged.addListener(listener);
 });
 
-$("unpair").addEventListener("click", async () => {
-  await chrome.storage.local.remove(["deviceToken"]);
+$("signout").addEventListener("click", async () => {
+  await chrome.runtime.sendMessage({ kind: "SIGN_OUT" });
   refresh();
 });
 
