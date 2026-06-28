@@ -65,7 +65,7 @@
       function onMessage(event) {
         if (event.source !== window) return;
         const msg = event.data;
-        if (!msg || msg.source !== "VM_PAGE_BRIDGE" || msg.id !== id) return;
+        if (!msg || msg.source !== "VM_PAGE_BRIDGE_058" || msg.id !== id) return;
         clearTimeout(timer);
         window.removeEventListener("message", onMessage);
         if (!msg.ok) reject(new Error(msg.error || "Vinted fetch failed"));
@@ -74,7 +74,7 @@
 
       window.addEventListener("message", onMessage);
       window.postMessage({
-        source: "VM_CONTENT",
+        source: "VM_CONTENT_058",
         id,
         kind,
         ...payload,
