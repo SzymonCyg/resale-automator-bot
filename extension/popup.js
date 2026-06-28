@@ -11,14 +11,14 @@ async function refresh() {
   } else {
     $("signedOut").style.display = "block";
     $("signedIn").style.display = "none";
-    $("panelUrl").value = status?.panelUrl || DEFAULT_PANEL_URL;
   }
 }
 
 $("signin").addEventListener("click", async () => {
-  const panelUrl = ($("panelUrl").value.trim() || DEFAULT_PANEL_URL).replace(/\/$/, "");
+  const panelUrl = DEFAULT_PANEL_URL.replace(/\/$/, "");
   await chrome.storage.local.set({ panelUrl });
-  await chrome.tabs.create({ url: `${panelUrl}/extension-connect?extId=${chrome.runtime.id}` });
+  const next = `/extension-connect?extId=${encodeURIComponent(chrome.runtime.id)}`;
+  await chrome.tabs.create({ url: `${panelUrl}/auth?next=${encodeURIComponent(next)}` });
   $("msg").innerHTML = '<div class="status ok">Otwarto panel — zaloguj się i wróć tutaj.</div>';
   const listener = (changes) => {
     if (changes.session) {
@@ -29,10 +29,7 @@ $("signin").addEventListener("click", async () => {
   chrome.storage.onChanged.addListener(listener);
 });
 
-$("openPanel").addEventListener("click", () =>
-  chrome.tabs.create({ url: chrome.runtime.getURL("panel.html") }),
-);
-$("openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
+$("openVinted").addEventListener("click", () => chrome.tabs.create({ url: "https://www.vinted.pl/" }));
 
 $("signout").addEventListener("click", async () => {
   await chrome.runtime.sendMessage({ kind: "SIGN_OUT" });

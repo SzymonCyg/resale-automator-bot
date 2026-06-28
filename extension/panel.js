@@ -5,6 +5,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 let items = [];
 let selected = new Set();
 let relistState = []; // {item, price, photos:[{dataUrl, rotation, crop}]}
+let extensionSignedIn = false;
 
 // ---------- TABS ----------
 $$(".tab").forEach((t) =>
@@ -19,6 +20,26 @@ function bg(kind, payload) {
   return new Promise((resolve) =>
     chrome.runtime.sendMessage({ kind, ...payload }, (r) => resolve(r)),
   );
+}
+
+async function refreshExtensionAuthUi() {
+  const status = await bg("GET_STATUS");
+  extensionSignedIn = !!status?.signedIn;
+  if (!extensionSignedIn) {
+    $("#whoami").textContent = "Zaloguj wtyczkę przez Google w popupie";
+    $("#itemsStatus").textContent = "Wtyczka niezalogowana";
+    $("#itemsBody").innerHTML = `<tr><td colspan="8" class="empty">Zaloguj wtyczkę przez Google, aby pobierać konto Vinted i wykonywać akcje.</td></tr>`;
+    ["#refreshItems", "#syncItems", "#relistBtn"].forEach((id) => { const el = $(id); if (el) el.disabled = true; });
+    return false;
+  }
+  ["#refreshItems", "#syncItems"].forEach((id) => { const el = $(id); if (el) el.disabled = false; });
+  updateSel();
+  return true;
+}
+
+async function requireExtensionLogin() {
+  if (extensionSignedIn || await refreshExtensionAuthUi()) return true;
+  throw new Error("Zaloguj wtyczkę przez Google w popupie");
 }
 
 async function getVintedTab() {
@@ -56,6 +77,7 @@ async function vintedMsg(tabId, msg) {
 
 // ---------- WHOAMI ----------
 async function loadWhoami() {
+  if (!(await refreshExtensionAuthUi())) return;
   const el = $("#whoami");
   el.textContent = "Sprawdzam sesję Vinted...";
   const tab = await getVintedTab();
@@ -68,10 +90,9 @@ async function loadWhoami() {
     el.textContent = `Brak połączenia z kartą Vinted: ${e.message}`;
   }
 }
-loadWhoami();
-
 // ---------- ITEMS ----------
 async function loadItems() {
+  if (!(await refreshExtensionAuthUi())) return;
   $("#itemsStatus").textContent = "Pobieram...";
   const tab = await getVintedTab();
   if (!tab) {
@@ -121,7 +142,7 @@ function renderItems() {
 
 function updateSel() {
   $("#selCount").textContent = `${selected.size} zaznaczonych`;
-  $("#relistBtn").disabled = selected.size === 0;
+  $("#relistBtn").disabled = !extensionSignedIn || selected.size === 0;
 }
 
 function escapeHtml(s) {
@@ -130,6 +151,7 @@ function escapeHtml(s) {
 
 $("#refreshItems").addEventListener("click", loadItems);
 $("#syncItems").addEventListener("click", async () => {
+  if (!(await refreshExtensionAuthUi())) return;
   $("#itemsStatus").textContent = "Synchronizuję...";
   const tab = await getVintedTab();
   if (!tab) { $("#itemsStatus").textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
@@ -154,6 +176,11 @@ $("#closeRelist").addEventListener("click", closeRelist);
 $("#cancelRelist").addEventListener("click", closeRelist);
 
 async function openRelist() {
+  try {
+    await requireExtensionLogin();
+  } catch (e) {
+    return log(`✗ ${e.message}`, "err");
+  }
   const chosen = items.filter((i) => selected.has(String(i.id)));
   $("#relistCount").textContent = chosen.length;
   $("#relistLog").innerHTML = "";
@@ -355,9 +382,10 @@ $("#runRelist").addEventListener("click", async () => {
         kind: "RELIST_ITEM",
         original: st.item,
         price: st.price,
+        currency: st.currency,
         photos,
       });
-      if (r?.ok) log(`✓ ${st.item.title} — nowy ID ${r.newId}`, "ok");
+      if (r?.ok) log(`✓ ${st.item.title} — nowy ID ${r.newId}, stare usunięte`, "ok");
       else log(`✗ ${st.item.title}: ${r?.error || "fail"}`, "err");
     } catch (e) {
       log(`✗ ${st.item.title}: ${e.message}`, "err");
@@ -437,5 +465,12 @@ $("#saveSettings").addEventListener("click", async () => {
   setTimeout(() => ($("#saveStatus").textContent = ""), 2000);
 });
 
-loadSettings();
-loadItems();
+async function boot() {
+  await loadSettings();
+  if (await refreshExtensionAuthUi()) {
+    await loadWhoami();
+    await loadItems();
+  }
+}
+
+boot();

@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
@@ -16,21 +17,37 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "Zaloguj się do panelu Vinted Manager." },
     ],
   }),
+  validateSearch: z.object({ next: z.string().optional() }),
   ssr: false,
   component: AuthPage,
 });
 
+function safeNext(next?: string) {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/auth")) {
+    return "/dashboard";
+  }
+  return next;
+}
+
 function AuthPage() {
   const navigate = useNavigate();
+  const { next } = Route.useSearch();
+  const nextTarget = safeNext(next);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  function goNext() {
+    if (nextTarget === "/dashboard") navigate({ to: "/dashboard", replace: true });
+    else window.location.assign(nextTarget);
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) navigate({ to: "/dashboard", replace: true });
+      if (data.user) goNext();
     });
-  }, [navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, nextTarget]);
 
   async function handleEmailSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -38,7 +55,7 @@ function AuthPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) return toast.error(error.message);
-    navigate({ to: "/dashboard", replace: true });
+    goNext();
   }
 
   async function handleEmailSignUp(e: React.FormEvent) {
@@ -47,7 +64,7 @@ function AuthPage() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin + "/dashboard" },
+      options: { emailRedirectTo: window.location.origin + nextTarget },
     });
     setLoading(false);
     if (error) return toast.error(error.message);
@@ -57,14 +74,14 @@ function AuthPage() {
   async function handleGoogle() {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/auth?next=${encodeURIComponent(nextTarget)}`,
     });
     if (result.error) {
       setLoading(false);
       return toast.error(String(result.error));
     }
     if (result.redirected) return;
-    navigate({ to: "/dashboard", replace: true });
+    goNext();
   }
 
   return (
