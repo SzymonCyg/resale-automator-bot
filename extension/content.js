@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.7.1";
+  const CONTENT_VERSION = "0.7.2";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -265,25 +265,36 @@
   }
 
   async function fetchItemDetail(id) {
-    // /api/v2/item_upload/items/{id}/edit zwraca pełny payload edytowalny
-    // razem ze status_id, catalog_id, brand_id itd. — używamy go w pierwszej kolejności,
-    // bo /api/v2/items/{id} zwraca "status" jako etykietę tekstową i Vinted odrzuca
-    // POST z validation_error: [:item, :status_id] = "".
+    // Standardowe endpointy najpierw — item_upload/edit często zwraca 404 z HTML-em.
     const tries = [
-      `/api/v2/item_upload/items/${id}/edit`,
-      `/api/v2/items/${id}/details`,
       `/api/v2/items/${id}?localize=false`,
       `/api/v2/items/${id}`,
+      `/api/v2/items/${id}/details`,
+      `/api/v2/item_upload/items/${id}/edit`,
     ];
     let lastErr;
     for (const path of tries) {
       try {
-        const r = await vintedApi(path);
+        const res = await vintedRaw(path, {});
+        const text = res?.text || "";
+        if (!res?.ok || text.trimStart().startsWith("<")) {
+          lastErr = new Error(`Vinted ${res?.status || "brak statusu"}: nieoczekiwana odpowiedź dla ${path}`);
+          continue;
+        }
+        const r = res?.json;
         const item = r?.item || r;
         if (item && (item.id || item.title)) return item;
       } catch (e) {
         lastErr = e;
       }
+    }
+    // Ostatni fallback — api.vinted.{tld}
+    try {
+      const r = await vintedApiHost(`/api/v2/items/${id}?localize=false`);
+      const item = r?.item || r;
+      if (item && (item.id || item.title)) return item;
+    } catch (e) {
+      lastErr = e;
     }
     throw lastErr || new Error("Nie mogę pobrać szczegółów przedmiotu");
   }
