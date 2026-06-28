@@ -27,10 +27,13 @@
   function buildHeaders(init = {}, hasBody = false) {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const anon = getCookie("anon_id") || getCookie("anonymous-locale") || "";
+    const accessToken = getCookie("access_token_web");
     const h = {
       Accept: "application/json, text/plain, */*",
       "X-CSRF-Token": csrf || "",
+      "X-Requested-With": "XMLHttpRequest",
       ...(anon ? { "X-Anon-Id": decodeURIComponent(anon) } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${decodeURIComponent(accessToken)}` } : {}),
       ...(init.headers || {}),
     };
     if (hasBody && !h["Content-Type"]) h["Content-Type"] = "application/json";

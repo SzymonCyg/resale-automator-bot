@@ -41,8 +41,13 @@
       const headers = new Headers(init.headers || {});
       const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
       const anon = getCookie("anon_id") || getCookie("anonymous-locale");
+      const accessToken = getCookie("access_token_web");
       if (csrf && !headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", csrf);
       if (anon && !headers.has("X-Anon-Id")) headers.set("X-Anon-Id", decodeURIComponent(anon));
+      if (accessToken && !headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${decodeURIComponent(accessToken)}`);
+      }
+      if (!headers.has("X-Requested-With")) headers.set("X-Requested-With", "XMLHttpRequest");
 
       const response = await fetch(url.toString(), {
         ...init,
