@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vinted Manager — Panel</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">V</span>
+        <div>
+          <h1>Vinted Manager</h1>
+          <p id="whoami" class="muted">—</p>
+        </div>
+      </div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="items">Przedmioty</button>
+        <button class="tab" data-tab="messages">Wiadomości</button>
+        <button class="tab" data-tab="settings">Ustawienia</button>
+      </nav>
+    </header>
+
+    <!-- ITEMS -->
+    <section class="view" data-view="items">
+      <div class="toolbar">
+        <div class="left">
+          <button id="refreshItems" class="btn">↻ Odśwież</button>
+          <span id="itemsStatus" class="muted"></span>
+        </div>
+        <div class="right">
+          <span id="selCount" class="muted">0 zaznaczonych</span>
+          <button id="relistBtn" class="btn primary" disabled>Wystaw ponownie</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="itemsTable">
+          <thead>
+            <tr>
+              <th style="width:36px"><input type="checkbox" id="selAll" /></th>
+              <th style="width:64px">Foto</th>
+              <th>Tytuł</th>
+              <th>Marka / rozmiar</th>
+              <th style="text-align:right">Cena</th>
+              <th style="text-align:right">Wyśw.</th>
+              <th style="text-align:right">❤</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="itemsBody">
+            <tr><td colspan="8" class="empty">Otwórz zalogowaną kartę vinted.* i kliknij Odśwież.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- MESSAGES (auto-reply rules quick view) -->
+    <section class="view hidden" data-view="messages">
+      <p class="muted">Reguły automatycznych odpowiedzi konfigurujesz w zakładce Ustawienia. Sprawdzane są co 5 min na otwartej karcie Vinted.</p>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view hidden" data-view="settings">
+      <div class="card">
+        <h2>Auto-bump</h2>
+        <label class="row">
+          <input type="checkbox" id="bumpEnabled" />
+          <span>Włącz automatyczne ponowne wystawianie</span>
+        </label>
+        <label class="row">
+          <span>Interwał (godziny)</span>
+          <input type="number" id="bumpInterval" min="3" max="168" value="8" />
+        </label>
+      </div>
+      <div class="card">
+        <h2>Auto-odpowiedzi</h2>
+        <div id="rules"></div>
+        <button id="addRule" class="btn">+ Dodaj regułę</button>
+      </div>
+      <button id="saveSettings" class="btn primary">Zapisz ustawienia</button>
+      <span id="saveStatus" class="muted"></span>
+    </section>
+
+    <!-- RELIST MODAL -->
+    <div id="relistModal" class="modal hidden">
+      <div class="modal-inner">
+        <header class="modal-head">
+          <h2>Ponowne wystawianie — <span id="relistCount">0</span> przedmiotów</h2>
+          <button id="closeRelist" class="btn ghost">✕</button>
+        </header>
+
+        <div class="relist-controls">
+          <fieldset>
+            <legend>Tryb edycji zdjęć</legend>
+            <label><input type="radio" name="photoMode" value="auto" checked /> Automatyczna (obrót ±1°)</label>
+            <label><input type="radio" name="photoMode" value="manual" /> Ręczna (edytuj każde poniżej)</label>
+            <label><input type="radio" name="photoMode" value="none" /> Bez zmian</label>
+          </fieldset>
+          <fieldset>
+            <legend>Cena — zmiana grupowa</legend>
+            <div class="row">
+              <select id="bulkPriceOp">
+                <option value="none">Bez zmian</option>
+                <option value="set">Ustaw na</option>
+                <option value="add">Dodaj</option>
+                <option value="sub">Odejmij</option>
+                <option value="pct">Procent (±%)</option>
+              </select>
+              <input type="number" step="0.01" id="bulkPriceVal" placeholder="0.00" />
+              <button id="applyBulkPrice" class="btn">Zastosuj do wszystkich</button>
+            </div>
+          </fieldset>
+        </div>
+
+        <div id="relistList" class="relist-list"></div>
+
+        <footer class="modal-foot">
+          <button id="cancelRelist" class="btn ghost">Anuluj</button>
+          <button id="runRelist" class="btn primary">Wykonaj ponowne wystawienie</button>
+        </footer>
+        <div id="relistLog" class="log"></div>
+      </div>
+    </div>
+
+    <script src="panel.js"></script>
+  </body>
+</html>
