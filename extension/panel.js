@@ -373,8 +373,6 @@ $("#runRelist").addEventListener("click", async () => {
   const mode = document.querySelector("input[name=photoMode]:checked").value;
   const tab = await getVintedTab();
   if (!tab) return log("✗ Brak otwartej karty Vinted", "err");
-  const tabOrigin = (() => { try { return new URL(tab.url).origin; } catch { return null; } })();
-  if (!tabOrigin) return log("✗ Nie mogę odczytać domeny vinted", "err");
   $("#runRelist").disabled = true;
   for (const st of relistState) {
     log(`→ ${st.item.title} (${st.price} ${st.currency})...`);
@@ -389,18 +387,23 @@ $("#runRelist").addEventListener("click", async () => {
         });
         photos.push(dataUrl);
       }
-      // Nowy flow: background otwiera /items/new w tle, content+form-bridge wypełniają formularz i klikają Save.
-      const r = await bg("RELIST_VIA_FORM", {
-        payload: {
-          origin: tabOrigin,
-          original: st.item,
-          price: st.price,
-          currency: st.currency,
-          photos,
-        },
+      // Pobierz pełny payload edytowalny dla starego ogłoszenia (status_id, brand_id itd.)
+      const detail = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL_V2", id: st.item.id });
+      if (!detail?.ok) throw new Error(detail?.error || "Nie mogę pobrać szczegółów starego ogłoszenia");
+      const original = { ...detail.item, id: st.item.id, currency: st.currency };
+      // Bezpośredni flow API (photos → drafts → completion) — bez otwierania nowej karty.
+      const r = await vintedMsg(tab.id, {
+        kind: "RELIST_ITEM_V2",
+        original,
+        price: st.price,
+        currency: st.currency,
+        photos,
       });
       if (r?.ok) {
-        log(`✓ ${st.item.title} — nowy ID ${r.newId}${r.deletedOld ? ", stare usunięte" : `, ⚠ usunięcie starego: ${r.deleteError || "fail"}`}`, "ok");
+        const delMsg = r.deletedOld
+          ? ", stare usunięte"
+          : `, ⚠ usunięcie starego: ${r.deleteError || "fail"}`;
+        log(`✓ ${st.item.title} — nowy ID ${r.newId}${delMsg}`, "ok");
       } else {
         log(`✗ ${st.item.title}: ${r?.error || "fail"}`, "err");
       }
