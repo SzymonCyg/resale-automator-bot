@@ -83,10 +83,88 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 });
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function waitTabComplete(tabId, timeout = 30000) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(onUpd);
+      reject(new Error("tab load timeout"));
+    }, timeout);
+    function onUpd(id, info) {
+      if (id === tabId && info.status === "complete") {
+        clearTimeout(t);
+        chrome.tabs.onUpdated.removeListener(onUpd);
+        resolve();
+      }
+    }
+    chrome.tabs.onUpdated.addListener(onUpd);
+    chrome.tabs.get(tabId).then((tab) => {
+      if (tab?.status === "complete") {
+        clearTimeout(t);
+        chrome.tabs.onUpdated.removeListener(onUpd);
+        resolve();
+      }
+    });
+  });
+}
+
+function waitForNewItemId(tabId, timeout = 90000) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(onUpd);
+      reject(new Error("timeout: brak navigacji do nowego ogłoszenia"));
+    }, timeout);
+    function onUpd(id, info, tab) {
+      if (id !== tabId) return;
+      const url = info.url || tab?.url || "";
+      const m = url.match(/\/items\/(\d+)(?:[/?#-]|$)/);
+      if (m && !/\/items\/new/.test(url)) {
+        clearTimeout(t);
+        chrome.tabs.onUpdated.removeListener(onUpd);
+        resolve(m[1]);
+      }
+    }
+    chrome.tabs.onUpdated.addListener(onUpd);
+  });
+}
+
+async function relistViaForm({ origin, original, price, currency, photos }) {
+  if (!origin) throw new Error("Brak origin (otwórz najpierw kartę vinted.*)");
+  const tab = await chrome.tabs.create({ url: `${origin}/items/new`, active: false });
+  let newId = null;
+  try {
+    await waitTabComplete(tab.id);
+    // Wstrzykuję bridge'a do MAIN world (CSP Vinted blokuje <script src=chrome-extension://>)
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["page-bridge.js"], world: "MAIN" }).catch(() => {});
+    // Daj Reactowi czas na zamontowanie formularza
+    await sleep(2500);
+    const navPromise = waitForNewItemId(tab.id, 90000);
+    const r = await chrome.tabs.sendMessage(tab.id, { kind: "FILL_AND_SUBMIT_V2", original, price, currency, photos });
+    if (!r?.ok) throw new Error(r?.error || "fill fail");
+    newId = await navPromise;
+    // delete starego — z tej samej karty (cookie + CSRF już są)
+    const del = await chrome.tabs.sendMessage(tab.id, { kind: "DELETE_ITEM_V2", id: original.id }).catch((e) => ({ ok: false, error: e.message }));
+    await chrome.tabs.remove(tab.id).catch(() => {});
+    return { newId, deletedOld: !!del?.ok, deleteError: del?.ok ? null : del?.error };
+  } catch (e) {
+    await chrome.tabs.remove(tab.id).catch(() => {});
+    throw e;
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.kind === "SYNC_ITEMS") {
     postSyncItems(msg.payload)
       .then((r) => sendResponse({ ok: true, r }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+  if (msg.kind === "RELIST_VIA_FORM") {
+    relistViaForm(msg.payload)
+      .then((r) => sendResponse({ ok: true, ...r }))
       .catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   }
