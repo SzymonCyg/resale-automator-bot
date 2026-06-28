@@ -9,38 +9,154 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedDownloadExtensionRouteImport } from './routes/_authenticated/download-extension'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAccountsAccountIdLogsRouteImport } from './routes/_authenticated/accounts.$accountId.logs'
+import { Route as AuthenticatedAccountsAccountIdItemsRouteImport } from './routes/_authenticated/accounts.$accountId.items'
+import { Route as AuthenticatedAccountsAccountIdAutoReplyRouteImport } from './routes/_authenticated/accounts.$accountId.auto-reply'
+import { Route as AuthenticatedAccountsAccountIdAutoBumpRouteImport } from './routes/_authenticated/accounts.$accountId.auto-bump'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedDownloadExtensionRoute =
+  AuthenticatedDownloadExtensionRouteImport.update({
+    id: '/download-extension',
+    path: '/download-extension',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAccountsAccountIdLogsRoute =
+  AuthenticatedAccountsAccountIdLogsRouteImport.update({
+    id: '/accounts/$accountId/logs',
+    path: '/accounts/$accountId/logs',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAccountsAccountIdItemsRoute =
+  AuthenticatedAccountsAccountIdItemsRouteImport.update({
+    id: '/accounts/$accountId/items',
+    path: '/accounts/$accountId/items',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAccountsAccountIdAutoReplyRoute =
+  AuthenticatedAccountsAccountIdAutoReplyRouteImport.update({
+    id: '/accounts/$accountId/auto-reply',
+    path: '/accounts/$accountId/auto-reply',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAccountsAccountIdAutoBumpRoute =
+  AuthenticatedAccountsAccountIdAutoBumpRouteImport.update({
+    id: '/accounts/$accountId/auto-bump',
+    path: '/accounts/$accountId/auto-bump',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/download-extension': typeof AuthenticatedDownloadExtensionRoute
+  '/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
+  '/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
+  '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
+  '/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/download-extension': typeof AuthenticatedDownloadExtensionRoute
+  '/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
+  '/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
+  '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
+  '/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/download-extension': typeof AuthenticatedDownloadExtensionRoute
+  '/_authenticated/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
+  '/_authenticated/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
+  '/_authenticated/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
+  '/_authenticated/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/download-extension'
+    | '/accounts/$accountId/auto-bump'
+    | '/accounts/$accountId/auto-reply'
+    | '/accounts/$accountId/items'
+    | '/accounts/$accountId/logs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/download-extension'
+    | '/accounts/$accountId/auto-bump'
+    | '/accounts/$accountId/auto-reply'
+    | '/accounts/$accountId/items'
+    | '/accounts/$accountId/logs'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/download-extension'
+    | '/_authenticated/accounts/$accountId/auto-bump'
+    | '/_authenticated/accounts/$accountId/auto-reply'
+    | '/_authenticated/accounts/$accountId/items'
+    | '/_authenticated/accounts/$accountId/logs'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +164,80 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/download-extension': {
+      id: '/_authenticated/download-extension'
+      path: '/download-extension'
+      fullPath: '/download-extension'
+      preLoaderRoute: typeof AuthenticatedDownloadExtensionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounts/$accountId/logs': {
+      id: '/_authenticated/accounts/$accountId/logs'
+      path: '/accounts/$accountId/logs'
+      fullPath: '/accounts/$accountId/logs'
+      preLoaderRoute: typeof AuthenticatedAccountsAccountIdLogsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounts/$accountId/items': {
+      id: '/_authenticated/accounts/$accountId/items'
+      path: '/accounts/$accountId/items'
+      fullPath: '/accounts/$accountId/items'
+      preLoaderRoute: typeof AuthenticatedAccountsAccountIdItemsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounts/$accountId/auto-reply': {
+      id: '/_authenticated/accounts/$accountId/auto-reply'
+      path: '/accounts/$accountId/auto-reply'
+      fullPath: '/accounts/$accountId/auto-reply'
+      preLoaderRoute: typeof AuthenticatedAccountsAccountIdAutoReplyRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounts/$accountId/auto-bump': {
+      id: '/_authenticated/accounts/$accountId/auto-bump'
+      path: '/accounts/$accountId/auto-bump'
+      fullPath: '/accounts/$accountId/auto-bump'
+      preLoaderRoute: typeof AuthenticatedAccountsAccountIdAutoBumpRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDownloadExtensionRoute: typeof AuthenticatedDownloadExtensionRoute
+  AuthenticatedAccountsAccountIdAutoBumpRoute: typeof AuthenticatedAccountsAccountIdAutoBumpRoute
+  AuthenticatedAccountsAccountIdAutoReplyRoute: typeof AuthenticatedAccountsAccountIdAutoReplyRoute
+  AuthenticatedAccountsAccountIdItemsRoute: typeof AuthenticatedAccountsAccountIdItemsRoute
+  AuthenticatedAccountsAccountIdLogsRoute: typeof AuthenticatedAccountsAccountIdLogsRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDownloadExtensionRoute: AuthenticatedDownloadExtensionRoute,
+  AuthenticatedAccountsAccountIdAutoBumpRoute:
+    AuthenticatedAccountsAccountIdAutoBumpRoute,
+  AuthenticatedAccountsAccountIdAutoReplyRoute:
+    AuthenticatedAccountsAccountIdAutoReplyRoute,
+  AuthenticatedAccountsAccountIdItemsRoute:
+    AuthenticatedAccountsAccountIdItemsRoute,
+  AuthenticatedAccountsAccountIdLogsRoute:
+    AuthenticatedAccountsAccountIdLogsRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
