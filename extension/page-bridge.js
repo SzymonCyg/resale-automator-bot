@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "0.7.0";
+  const BRIDGE_VERSION = "0.7.1";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -21,17 +21,12 @@
       || "";
   }
 
-  // Reference (Dotb) wysyła wszystkie zapytania API przez subdomenę api.vinted.{tld}.
-  // Cookies są na .vinted.{tld} więc credentials lecą poprawnie.
-  function apiOrigin() {
-    const host = window.location.hostname.replace(/^www\./, "");
-    return `${window.location.protocol}//api.${host}`;
-  }
-
-  function buildUrl(path, useApiHost) {
+  // Subdomena api.vinted.{tld} obsługuje wyłącznie auth mobilnego API i z poziomu
+  // przeglądarki zwraca HTML 404 dla /api/v2/*. Wszystkie zapytania lecą więc
+  // same-origin (www.vinted.{tld}) — wtedy lecą cookies sesji i CSRF jest ważny.
+  function buildUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
-    const base = useApiHost ? apiOrigin() : window.location.origin;
-    return new URL(path, base).toString();
+    return new URL(path, window.location.origin).toString();
   }
 
   async function toPayload(response) {
@@ -87,13 +82,13 @@
         headers.set("Accept", "application/json, text/plain, */*");
         headers.set("Locale", locale);
 
-        // api.vinted.{tld} — identycznie jak referencyjna wtyczka.
-        const url = buildUrl("/api/v2/photos", true);
+        // Same-origin upload — Vinted akceptuje /api/v2/photos na www.vinted.{tld}
+        const url = buildUrl("/api/v2/photos");
         const response = await fetch(url, {
           method: "POST",
           headers,
           credentials: "include",
-          mode: "cors",
+          mode: "same-origin",
           cache: "no-store",
           referrer: new URL("/items/new", window.location.origin).toString(),
           body: form,
@@ -109,7 +104,7 @@
       if (msg.kind !== "FETCH") return;
 
       const init = msg.init || {};
-      const url = buildUrl(msg.path, !!init.useApiHost);
+      const url = buildUrl(msg.path);
       const headers = new Headers(init.headers || {});
       if (init.skipXRequestedWith) headers.delete("X-Requested-With");
       if (csrf && !headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", csrf);
@@ -121,7 +116,7 @@
         ...init,
         headers,
         credentials: "include",
-        mode: init.mode || "cors",
+        mode: "same-origin",
         cache: init.cache || "no-store",
         referrer: init.referrer,
       });

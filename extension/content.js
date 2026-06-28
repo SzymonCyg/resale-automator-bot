@@ -377,8 +377,6 @@
 
   async function deleteOldItem(itemId) {
     const attempts = [
-      { path: `/api/v2/items/${itemId}`, init: { method: "DELETE", useApiHost: true } },
-      { path: `/api/v2/items/${itemId}/delete`, init: { method: "POST", body: JSON.stringify({}), useApiHost: true } },
       { path: `/api/v2/items/${itemId}`, init: { method: "DELETE" } },
       { path: `/api/v2/items/${itemId}/delete`, init: { method: "POST", body: JSON.stringify({}) } },
     ];
