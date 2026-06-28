@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "0.5.8";
+  const BRIDGE_VERSION = "0.7.0";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -19,6 +19,19 @@
       || document.documentElement.innerHTML.match(/"csrfToken"\s*:\s*"([^"]+)"/i)?.[1]
       || document.documentElement.innerHTML.match(/"csrf_token"\s*:\s*"([^"]+)"/i)?.[1]
       || "";
+  }
+
+  // Reference (Dotb) wysyła wszystkie zapytania API przez subdomenę api.vinted.{tld}.
+  // Cookies są na .vinted.{tld} więc credentials lecą poprawnie.
+  function apiOrigin() {
+    const host = window.location.hostname.replace(/^www\./, "");
+    return `${window.location.protocol}//api.${host}`;
+  }
+
+  function buildUrl(path, useApiHost) {
+    if (/^https?:\/\//i.test(path)) return path;
+    const base = useApiHost ? apiOrigin() : window.location.origin;
+    return new URL(path, base).toString();
   }
 
   async function toPayload(response) {
@@ -59,6 +72,7 @@
       const csrf = msg.csrfToken || readCsrfToken();
       if (msg.csrfToken) window.__VM_CSRF_TOKEN__ = msg.csrfToken;
       const anon = getCookie("anon_id") || getCookie("anonymous-locale");
+      const locale = document.documentElement.lang || navigator.language || "pl";
 
       if (msg.kind === "UPLOAD_PHOTO") {
         const form = new FormData();
@@ -70,13 +84,12 @@
         const headers = new Headers();
         if (csrf) headers.set("X-CSRF-Token", csrf);
         if (anon) headers.set("X-Anon-Id", decodeURIComponent(anon));
-        headers.set("X-Enable-Multiple-Size-Groups", "true");
         headers.set("Accept", "application/json, text/plain, */*");
-        headers.set("Locale", document.documentElement.lang || navigator.language || "pl");
+        headers.set("Locale", locale);
 
-        // To musi odpowiadać zwykłemu webowemu formularzowi Vinted: cookies + CSRF,
-        // bez nagłówka Authorization i bez /web/ prefixu, inaczej endpoint zwraca code 106.
-        const response = await fetch(new URL("/api/v2/photos", window.location.origin).toString(), {
+        // api.vinted.{tld} — identycznie jak referencyjna wtyczka.
+        const url = buildUrl("/api/v2/photos", true);
+        const response = await fetch(url, {
           method: "POST",
           headers,
           credentials: "include",
@@ -95,32 +108,22 @@
 
       if (msg.kind !== "FETCH") return;
 
-      const url = new URL(msg.path, window.location.origin);
-      if (url.origin !== window.location.origin) throw new Error("Zablokowano obcy origin");
-
       const init = msg.init || {};
+      const url = buildUrl(msg.path, !!init.useApiHost);
       const headers = new Headers(init.headers || {});
       if (init.skipXRequestedWith) headers.delete("X-Requested-With");
       if (csrf && !headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", csrf);
       if (anon && !headers.has("X-Anon-Id")) headers.set("X-Anon-Id", decodeURIComponent(anon));
       if (!init.skipXRequestedWith && !headers.has("X-Requested-With")) headers.set("X-Requested-With", "XMLHttpRequest");
-      if (!headers.has("Locale")) headers.set("Locale", document.documentElement.lang || navigator.language || "pl");
-      if (String(url.pathname).includes("/api/v2/item_upload/items")) {
-        headers.set("X-Upload-Form", "true");
-        headers.set("X-Enable-Dynamic-Attribute-Condition", "true");
-        headers.set("X-Enable-Dynamic-Attribute-Video-Game-Rating", "true");
-        headers.set("X-Enable-Multiple-Size-Groups", "true");
-      }
+      if (!headers.has("Locale")) headers.set("Locale", locale);
 
-      const response = await fetch(url.toString(), {
+      const response = await fetch(url, {
         ...init,
         headers,
         credentials: "include",
         mode: init.mode || "cors",
         cache: init.cache || "no-store",
-        referrer: init.referrer || (String(url.pathname).includes("/api/v2/item_upload/items")
-          ? new URL("/items/new", window.location.origin).toString()
-          : undefined),
+        referrer: init.referrer,
       });
 
       window.postMessage(
