@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vinted Manager Helper",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Panel do zarządzania kontami Vinted: podgląd przedmiotów, ponowne wystawianie z edycją zdjęć i cen, auto-odpowiedzi.",
   "permissions": ["storage", "alarms", "activeTab", "tabs", "scripting"],
   "host_permissions": [
@@ -14,6 +14,8 @@
     "https://*.vinted.cz/*",
     "https://*.vinted.sk/*",
     "https://*.vinted.co.uk/*",
+    "https://*.vinted.net/*",
+    "https://*.vinted.com/*",
     "https://*.lovable.app/*",
     "https://*.lovable.dev/*",
     "https://*.supabase.co/*"
