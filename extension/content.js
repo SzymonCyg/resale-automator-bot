@@ -265,12 +265,12 @@
   }
 
   async function fetchItemDetail(id) {
-    // Standardowe endpointy najpierw — item_upload/edit często zwraca 404 z HTML-em.
+    // Dotb używa /api/v2/item_upload/items/${id} (BEZ /edit) — zwraca pełny edytowalny payload
     const tries = [
+      `/api/v2/item_upload/items/${id}`,
       `/api/v2/items/${id}?localize=false`,
       `/api/v2/items/${id}`,
       `/api/v2/items/${id}/details`,
-      `/api/v2/item_upload/items/${id}/edit`,
     ];
     let lastErr;
     for (const path of tries) {
@@ -278,7 +278,7 @@
         const res = await vintedRaw(path, {});
         const text = res?.text || "";
         if (!res?.ok || text.trimStart().startsWith("<")) {
-          lastErr = new Error(`Vinted ${res?.status || "brak statusu"}: nieoczekiwana odpowiedź dla ${path}`);
+          lastErr = new Error(`Vinted ${res?.status || "brak statusu"}: HTML zamiast JSON (${path})`);
           continue;
         }
         const r = res?.json;
@@ -288,9 +288,9 @@
         lastErr = e;
       }
     }
-    // Ostatni fallback — api.vinted.{tld}
+    // Fallback przez api.vinted.{tld}
     try {
-      const r = await vintedApiHost(`/api/v2/items/${id}?localize=false`);
+      const r = await vintedApiHost(`/api/v2/item_upload/items/${id}`);
       const item = r?.item || r;
       if (item && (item.id || item.title)) return item;
     } catch (e) {
@@ -298,6 +298,7 @@
     }
     throw lastErr || new Error("Nie mogę pobrać szczegółów przedmiotu");
   }
+
 
   // Mapowanie etykiet stanu Vinted → status_id (stabilne globalnie).
   const STATUS_LABEL_TO_ID = {
