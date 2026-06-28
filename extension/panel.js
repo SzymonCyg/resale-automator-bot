@@ -66,6 +66,7 @@ function tabMsg(tabId, msg) {
 async function ensureVintedScripts(tabId) {
   // Vinted blokuje <script src="chrome-extension://..."> przez CSP, dlatego bridge
   // musi być wstrzyknięty oficjalnym API Chrome do MAIN world.
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   await chrome.scripting.executeScript({ target: { tabId }, files: ["page-bridge.js"], world: "MAIN" });
 }
 
@@ -91,7 +92,7 @@ async function loadWhoami() {
   const tab = await getVintedTab();
   if (!tab) { el.textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
   try {
-    const r = await vintedMsg(tab.id, { kind: "GET_ME" });
+    const r = await vintedMsg(tab.id, { kind: "GET_ME_V2" });
     if (r?.ok && r.username) el.textContent = `Zalogowano: ${r.username}`;
     else el.textContent = r?.error || "Niezalogowany na Vinted";
   } catch (e) {
@@ -108,7 +109,7 @@ async function loadItems() {
     return;
   }
   try {
-    const r = await vintedMsg(tab.id, { kind: "FETCH_ITEMS" });
+    const r = await vintedMsg(tab.id, { kind: "FETCH_ITEMS_V2" });
     if (!r?.ok) throw new Error(r?.error || "fetch fail");
     items = r.items || [];
     renderItems();
@@ -164,7 +165,7 @@ $("#syncItems").addEventListener("click", async () => {
   const tab = await getVintedTab();
   if (!tab) { $("#itemsStatus").textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
   try {
-    const r = await vintedMsg(tab.id, { kind: "SYNC_NOW" });
+    const r = await vintedMsg(tab.id, { kind: "SYNC_NOW_V2" });
     if (!r?.ok) throw new Error(r?.error || "fail");
     $("#itemsStatus").textContent = `✓ Zsynchronizowano ${r.count} przedmiotów (${r.username})`;
   } catch (e) {
@@ -201,7 +202,7 @@ async function openRelist() {
   relistState = [];
   for (const it of chosen) {
     try {
-      const r = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL", id: it.id });
+      const r = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL_V2", id: it.id });
       const detail = r?.item || it;
       const photoUrls = detail.photos?.map((p) => p.full_size_url || p.url) || (it.photo_url ? [it.photo_url] : []);
       const photos = await Promise.all(photoUrls.map(loadPhoto));
@@ -387,7 +388,7 @@ $("#runRelist").addEventListener("click", async () => {
         photos.push(dataUrl);
       }
       const r = await vintedMsg(tab.id, {
-        kind: "RELIST_ITEM",
+        kind: "RELIST_ITEM_V2",
         original: st.item,
         price: st.price,
         currency: st.currency,

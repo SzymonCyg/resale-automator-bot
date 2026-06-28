@@ -1,6 +1,8 @@
 (function () {
-  if (window.__VM_PAGE_BRIDGE__) return;
+  const BRIDGE_VERSION = "0.5.8";
+  if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
+  window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
 
   function getCookie(name) {
     return document.cookie
@@ -8,6 +10,15 @@
       .map((c) => c.trim())
       .find((c) => c.startsWith(name + "="))
       ?.split("=")[1];
+  }
+
+  function readCsrfToken() {
+    return window.__VM_CSRF_TOKEN__
+      || document.querySelector('meta[name="csrf-token"]')?.content
+      || document.documentElement.innerHTML.match(/CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
+      || document.documentElement.innerHTML.match(/"csrfToken"\s*:\s*"([^"]+)"/i)?.[1]
+      || document.documentElement.innerHTML.match(/"csrf_token"\s*:\s*"([^"]+)"/i)?.[1]
+      || "";
   }
 
   async function toPayload(response) {
@@ -42,12 +53,12 @@
   window.addEventListener("message", async (event) => {
     if (event.source !== window) return;
     const msg = event.data;
-    if (!msg || msg.source !== "VM_CONTENT" || !msg.kind || !msg.id) return;
+    if (!msg || msg.source !== "VM_CONTENT_058" || !msg.kind || !msg.id) return;
 
     try {
-      const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+      const csrf = msg.csrfToken || readCsrfToken();
+      if (msg.csrfToken) window.__VM_CSRF_TOKEN__ = msg.csrfToken;
       const anon = getCookie("anon_id") || getCookie("anonymous-locale");
-      const accessToken = getCookie("access_token_web");
 
       if (msg.kind === "UPLOAD_PHOTO") {
         const form = new FormData();
@@ -59,33 +70,24 @@
         const headers = new Headers();
         if (csrf) headers.set("X-CSRF-Token", csrf);
         if (anon) headers.set("X-Anon-Id", decodeURIComponent(anon));
-        if (accessToken) headers.set("Authorization", `Bearer ${decodeURIComponent(accessToken)}`);
-        headers.set("X-Requested-With", "XMLHttpRequest");
-        headers.set("X-Upload-Form", "true");
-        headers.set("X-Money-Object", "true");
+        headers.set("X-Enable-Multiple-Size-Groups", "true");
         headers.set("Accept", "application/json, text/plain, */*");
         headers.set("Locale", document.documentElement.lang || navigator.language || "pl");
 
-        // Vinted blokuje /api/v2/photos zwykłym 403 (code 106 access_denied);
-        // właściwy endpoint dla web flow to /web/api/v2/photos.
-        const endpoints = ["/web/api/v2/photos", "/api/v2/photos"];
-        let response = null;
-        for (const path of endpoints) {
-          response = await fetch(new URL(path, window.location.origin).toString(), {
-            method: "POST",
-            headers,
-            credentials: "include",
-            mode: "cors",
-            cache: "no-store",
-            referrer: new URL("/items/new", window.location.origin).toString(),
-            body: form,
-          });
-          if (response.ok) break;
-          if (response.status !== 403 && response.status !== 404) break;
-        }
+        // To musi odpowiadać zwykłemu webowemu formularzowi Vinted: cookies + CSRF,
+        // bez nagłówka Authorization i bez /web/ prefixu, inaczej endpoint zwraca code 106.
+        const response = await fetch(new URL("/api/v2/photos", window.location.origin).toString(), {
+          method: "POST",
+          headers,
+          credentials: "include",
+          mode: "cors",
+          cache: "no-store",
+          referrer: new URL("/items/new", window.location.origin).toString(),
+          body: form,
+        });
 
         window.postMessage(
-          { source: "VM_PAGE_BRIDGE", id: msg.id, ok: true, response: await toPayload(response) },
+          { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: await toPayload(response) },
           window.location.origin,
         );
         return;
@@ -101,15 +103,13 @@
       if (init.skipXRequestedWith) headers.delete("X-Requested-With");
       if (csrf && !headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", csrf);
       if (anon && !headers.has("X-Anon-Id")) headers.set("X-Anon-Id", decodeURIComponent(anon));
-      if (accessToken && !headers.has("Authorization")) {
-        headers.set("Authorization", `Bearer ${decodeURIComponent(accessToken)}`);
-      }
       if (!init.skipXRequestedWith && !headers.has("X-Requested-With")) headers.set("X-Requested-With", "XMLHttpRequest");
       if (!headers.has("Locale")) headers.set("Locale", document.documentElement.lang || navigator.language || "pl");
       if (String(url.pathname).includes("/api/v2/item_upload/items")) {
         headers.set("X-Upload-Form", "true");
         headers.set("X-Enable-Dynamic-Attribute-Condition", "true");
         headers.set("X-Enable-Dynamic-Attribute-Video-Game-Rating", "true");
+        headers.set("X-Enable-Multiple-Size-Groups", "true");
       }
 
       const response = await fetch(url.toString(), {
@@ -124,13 +124,13 @@
       });
 
       window.postMessage(
-        { source: "VM_PAGE_BRIDGE", id: msg.id, ok: true, response: await toPayload(response) },
+        { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: await toPayload(response) },
         window.location.origin,
       );
     } catch (error) {
       window.postMessage(
         {
-          source: "VM_PAGE_BRIDGE",
+          source: "VM_PAGE_BRIDGE_058",
           id: msg.id,
           ok: false,
           error: `${msg.kind}${msg.path ? ` ${msg.path}` : ""}: ${error?.message || String(error)}`,

@@ -1,7 +1,9 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  if (window.__VM_CONTENT_LOADED__) return;
+  const CONTENT_VERSION = "0.5.8";
+  if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
+  window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
 
   const host = location.hostname.replace(/^www\./, "");
   const country = host.split(".").pop();
@@ -25,16 +27,31 @@
     return document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith(name + "="))?.split("=")[1];
   }
 
+  function readCsrfTokenFromText(text) {
+    return String(text || "").match(/CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
+      || String(text || "").match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/i)?.[1]
+      || String(text || "").match(/<meta\s+content="([^"]+)"\s+name="csrf-token"/i)?.[1]
+      || String(text || "").match(/"csrfToken"\s*:\s*"([^"]+)"/i)?.[1]
+      || String(text || "").match(/"csrf_token"\s*:\s*"([^"]+)"/i)?.[1]
+      || "";
+  }
+
+  function readCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || readCsrfTokenFromText(document.documentElement.innerHTML);
+  }
+
+  function newUuid() {
+    return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   function buildHeaders(init = {}, hasBody = false) {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    const csrf = init.csrfToken || readCsrfToken();
     const anon = getCookie("anon_id") || getCookie("anonymous-locale") || "";
-    const accessToken = getCookie("access_token_web");
     const skipXRequestedWith = init.skipXRequestedWith;
     const h = {
       Accept: "application/json, text/plain, */*",
       "X-CSRF-Token": csrf || "",
       ...(anon ? { "X-Anon-Id": decodeURIComponent(anon) } : {}),
-      ...(accessToken ? { Authorization: `Bearer ${decodeURIComponent(accessToken)}` } : {}),
       ...(init.headers || {}),
     };
     if (!skipXRequestedWith) h["X-Requested-With"] = h["X-Requested-With"] || "XMLHttpRequest";
@@ -54,7 +71,7 @@
       function onMessage(event) {
         if (event.source !== window) return;
         const msg = event.data;
-        if (!msg || msg.source !== "VM_PAGE_BRIDGE" || msg.id !== id) return;
+        if (!msg || msg.source !== "VM_PAGE_BRIDGE_058" || msg.id !== id) return;
         clearTimeout(timer);
         window.removeEventListener("message", onMessage);
         if (!msg.ok) reject(new Error(msg.error || "Vinted fetch failed"));
@@ -63,7 +80,7 @@
 
       window.addEventListener("message", onMessage);
       window.postMessage({
-        source: "VM_CONTENT",
+        source: "VM_CONTENT_058",
         id,
         kind,
         ...payload,
@@ -72,9 +89,10 @@
   }
 
   function pageFetch(path, init = {}) {
-    const { skipXRequestedWith, ...fetchInit } = init;
+    const { skipXRequestedWith, csrfToken, ...fetchInit } = init;
     return bridgeRequest("FETCH", {
       path,
+      csrfToken,
       init: {
         ...fetchInit,
         skipXRequestedWith,
@@ -83,10 +101,11 @@
     });
   }
 
-  function pageUploadPhoto(dataUrl, tempUuid) {
+  function pageUploadPhoto(dataUrl, tempUuid, csrfToken) {
     return bridgeRequest("UPLOAD_PHOTO", {
       dataUrl,
       tempUuid,
+      csrfToken,
       filename: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
     }, 60000);
   }
@@ -263,17 +282,14 @@
     const uploadSessionId = text.match(/\\"uploadSessionId\\"\s*:\s*\\"([^\\]+)\\"/i)?.[1]
       || text.match(/"uploadSessionId"\s*:\s*"([^"]+)"/i)?.[1]
       || text.match(/uploadSessionId["\\:]+([^"\\]+)["\\]?/i)?.[1];
-    const tempUuid = text.match(/"tempUuid"\s*:\s*"([^"\\]+)"/i)?.[1]
-      || text.match(/"temp_uuid"\s*:\s*"([^"\\]+)"/i)?.[1]
-      || text.match(/tempUuid\s*[:=]\s*["']([^"']+)["']/i)?.[1]
-      || crypto.randomUUID?.();
+    const csrfToken = readCsrfTokenFromText(text) || readCsrfToken();
     if (!uploadSessionId) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak uploadSessionId)");
-    if (!tempUuid) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak tempUuid)");
-    return { uploadSessionId, tempUuid };
+    if (!csrfToken) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak CSRF tokenu)");
+    return { uploadSessionId, csrfToken };
   }
 
-  async function uploadPhotoDataUrl(dataUrl, tempUuid) {
-    const res = await pageUploadPhoto(dataUrl, tempUuid);
+  async function uploadPhotoDataUrl(dataUrl, tempUuid, csrfToken) {
+    const res = await pageUploadPhoto(dataUrl, tempUuid, csrfToken);
     if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
     const j = res.json;
     const id = j?.photo?.id ?? j?.id;
@@ -342,15 +358,17 @@
 
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
-    const { uploadSessionId, tempUuid } = await getUploadContext();
+    const { uploadSessionId, csrfToken } = await getUploadContext();
+    const tempUuid = uploadSessionId || newUuid();
     const photoIds = [];
     for (const p of photos) {
-      const id = await uploadPhotoDataUrl(p, tempUuid);
+      const id = await uploadPhotoDataUrl(p, tempUuid, csrfToken);
       if (id) photoIds.push(id);
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
     const item = cleanPayload({
+      id: null,
       temp_uuid: tempUuid,
       title: original.title,
       description: original.description || original.title || "",
@@ -389,8 +407,11 @@
         "X-Upload-Form": "true",
         "X-Enable-Dynamic-Attribute-Condition": "true",
         "X-Enable-Dynamic-Attribute-Video-Game-Rating": "true",
+        "X-Enable-Multiple-Size-Groups": "true",
+        "X-CSRF-Token": csrfToken,
       },
       referrer: `${origin}/items/new`,
+      csrfToken,
       body: JSON.stringify(body),
     });
     const newId = created?.item?.id ?? created?.id;
@@ -464,19 +485,19 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS", "FETCH_ITEM_DETAIL", "RELIST_ITEM", "RUN_REPLIES", "SYNC_NOW"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS", "FETCH_ITEMS_V2", "FETCH_ITEM_DETAIL", "FETCH_ITEM_DETAIL_V2", "RELIST_ITEM", "RELIST_ITEM_V2", "RUN_REPLIES", "RUN_REPLIES_V2", "SYNC_NOW", "SYNC_NOW_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
-        if (msg.kind === "FETCH_ITEMS") sendResponse({ ok: true, ...(await fetchMyItems()) });
-        else if (msg.kind === "GET_ME") {
+        if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
+        else if (msg.kind === "GET_ME" || msg.kind === "GET_ME_V2") {
           const me = await getMe();
           sendResponse({ ok: true, username: me?.login, userId: me?.id, photo: me?.photo?.url });
         }
-        else if (msg.kind === "FETCH_ITEM_DETAIL") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
-        else if (msg.kind === "RELIST_ITEM") {
+        else if (msg.kind === "FETCH_ITEM_DETAIL" || msg.kind === "FETCH_ITEM_DETAIL_V2") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
+        else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") {
           sendResponse({ ok: true, ...(await relistItem(msg)) });
-        } else if (msg.kind === "RUN_REPLIES") { await runReplies(); sendResponse({ ok: true }); }
-        else if (msg.kind === "SYNC_NOW") sendResponse({ ok: true, ...(await syncToPanel()) });
+        } else if (msg.kind === "RUN_REPLIES" || msg.kind === "RUN_REPLIES_V2") { await runReplies(); sendResponse({ ok: true }); }
+        else if (msg.kind === "SYNC_NOW" || msg.kind === "SYNC_NOW_V2") sendResponse({ ok: true, ...(await syncToPanel()) });
       } catch (e) {
         sendResponse({ ok: false, error: e.message });
       }
