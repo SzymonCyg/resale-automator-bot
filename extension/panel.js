@@ -90,8 +90,6 @@ async function loadWhoami() {
     el.textContent = `Brak połączenia z kartą Vinted: ${e.message}`;
   }
 }
-loadWhoami();
-
 // ---------- ITEMS ----------
 async function loadItems() {
   if (!(await refreshExtensionAuthUi())) return;
@@ -144,7 +142,7 @@ function renderItems() {
 
 function updateSel() {
   $("#selCount").textContent = `${selected.size} zaznaczonych`;
-  $("#relistBtn").disabled = selected.size === 0;
+  $("#relistBtn").disabled = !extensionSignedIn || selected.size === 0;
 }
 
 function escapeHtml(s) {
