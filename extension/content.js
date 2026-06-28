@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.7.2";
+  const CONTENT_VERSION = "0.7.5";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -17,10 +17,9 @@
     script.id = "vm-page-bridge";
     script.src = chrome.runtime.getURL("page-bridge.js");
     script.async = false;
-    script.onerror = () => console.warn("[Vinted Manager] page-bridge został zablokowany przez CSP; panel wstrzyknie go przez chrome.scripting.");
+    script.onerror = () => console.warn("[Vinted Manager] page-bridge zablokowany przez CSP");
     (document.head || document.documentElement).appendChild(script);
   }
-
   injectPageBridge();
 
   function getCookie(name) {
@@ -67,7 +66,6 @@
         window.removeEventListener("message", onMessage);
         reject(new Error("Timeout połączenia z Vinted"));
       }, timeout);
-
       function onMessage(event) {
         if (event.source !== window) return;
         const msg = event.data;
@@ -77,14 +75,8 @@
         if (!msg.ok) reject(new Error(msg.error || "Vinted fetch failed"));
         else resolve(msg.response);
       }
-
       window.addEventListener("message", onMessage);
-      window.postMessage({
-        source: "VM_CONTENT_058",
-        id,
-        kind,
-        ...payload,
-      }, origin);
+      window.postMessage({ source: "VM_CONTENT_058", id, kind, ...payload }, origin);
     });
   }
 
@@ -93,38 +85,24 @@
     return bridgeRequest("FETCH", {
       path,
       csrfToken,
-      init: {
-        ...fetchInit,
-        skipXRequestedWith,
-        useApiHost: !!useApiHost,
-        headers: buildHeaders(init, !!init.body),
-      },
+      init: { ...fetchInit, skipXRequestedWith, useApiHost: !!useApiHost, headers: buildHeaders(init, !!init.body) },
     });
   }
 
+  // Każde zdjęcie dostaje własne unikalne UUID (jak jv() w Dotb)
   function pageUploadPhoto(dataUrl, csrfToken) {
-    const photoUuid = (typeof crypto !== "undefined" && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     return bridgeRequest("UPLOAD_PHOTO", {
       dataUrl,
-      tempUuid: photoUuid,
+      tempUuid: newUuid(),
       csrfToken,
       filename: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
     }, 60000);
   }
 
-
   async function vintedApi(path, init = {}) {
     const res = await pageFetch(path, init);
     if (!res.ok) throw new Error(`Vinted ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
     return res.json;
-  }
-
-  // Wariant uderzający w api.vinted.{tld} — używamy do całego flow uploadu i draftów,
-  // zgodnie z referencyjną wtyczką (Dotb), gdzie www.vinted.* zwraca 400/422 dla item_upload.
-  async function vintedApiHost(path, init = {}) {
-    return vintedApi(path, { ...init, useApiHost: true });
   }
 
   async function vintedRaw(path, init = {}) {
@@ -137,9 +115,7 @@
 
   async function ensureExtensionSignedIn() {
     const status = await getExtensionStatus();
-    if (!status?.signedIn) {
-      throw new Error("Zaloguj wtyczkę przez Google w popupie, aby używać funkcji Vinted Manager");
-    }
+    if (!status?.signedIn) throw new Error("Zaloguj wtyczkę przez Google w popupie, aby używać funkcji Vinted Manager");
     return status;
   }
 
@@ -155,9 +131,7 @@
     if (typeof value !== "object") return null;
     const id = value.id ?? value.user_id ?? value.userId;
     const login = value.login ?? value.username ?? value.user_login ?? value.userName;
-    if (id && login && typeof login === "string" && !/zaloguj|signup|login/i.test(login)) {
-      return { id: String(id), login };
-    }
+    if (id && login && typeof login === "string" && !/zaloguj|signup|login/i.test(login)) return { id: String(id), login };
     for (const key of Object.keys(value).slice(0, 80)) {
       if (/owner|seller|buyer/.test(key)) continue;
       const found = findUserInObject(value[key], depth + 1);
@@ -206,14 +180,11 @@
   }
 
   async function getMe() {
-    const endpoints = ["/api/v2/users/current", "/api/v2/users/me"];
-    for (const endpoint of endpoints) {
+    for (const endpoint of ["/api/v2/users/current", "/api/v2/users/me"]) {
       try {
         const me = await vintedApi(endpoint);
         const user = me?.user ?? me?.current_user ?? me;
-        if (user?.id && (user.login || user.username)) {
-          return { ...user, login: user.login || user.username };
-        }
+        if (user?.id && (user.login || user.username)) return { ...user, login: user.login || user.username };
       } catch (e) {
         console.warn("[VM] getMe endpoint fail", endpoint, e);
       }
@@ -224,7 +195,6 @@
   }
 
   async function fetchRawItems(userId) {
-    // Vinted ma kilka endpointów — próbujemy po kolei.
     const tries = [
       `/api/v2/wardrobe/${userId}/items?per_page=200&page=1&order=newest_first`,
       `/api/v2/wardrobe/${userId}?per_page=200&page=1&order=newest_first`,
@@ -238,9 +208,7 @@
         const r = await vintedApi(path);
         const arr = r?.items ?? r?.wardrobe_items ?? r?.user?.items ?? r?.data?.items;
         if (Array.isArray(arr)) return arr;
-      } catch (e) {
-        lastErr = e;
-      }
+      } catch (e) { lastErr = e; }
     }
     throw lastErr || new Error("Brak działającego endpointu /items");
   }
@@ -268,8 +236,8 @@
     return { username: me.login, userId: me.id, items: raw.map(normalize) };
   }
 
+  // Dotb: bh(id) = GET /api/v2/item_upload/items/{id} — BEZ /edit
   async function fetchItemDetail(id) {
-    // Dotb używa /api/v2/item_upload/items/${id} (BEZ /edit) — zwraca pełny edytowalny payload
     const tries = [
       `/api/v2/item_upload/items/${id}`,
       `/api/v2/items/${id}?localize=false`,
@@ -282,29 +250,16 @@
         const res = await vintedRaw(path, {});
         const text = res?.text || "";
         if (!res?.ok || text.trimStart().startsWith("<")) {
-          lastErr = new Error(`Vinted ${res?.status || "brak statusu"}: HTML zamiast JSON (${path})`);
+          lastErr = new Error(`Vinted ${res?.status || "?"}: HTML zamiast JSON (${path})`);
           continue;
         }
-        const r = res?.json;
-        const item = r?.item || r;
+        const item = res?.json?.item || res?.json;
         if (item && (item.id || item.title)) return item;
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-    // Fallback przez api.vinted.{tld}
-    try {
-      const r = await vintedApiHost(`/api/v2/item_upload/items/${id}`);
-      const item = r?.item || r;
-      if (item && (item.id || item.title)) return item;
-    } catch (e) {
-      lastErr = e;
+      } catch (e) { lastErr = e; }
     }
     throw lastErr || new Error("Nie mogę pobrać szczegółów przedmiotu");
   }
 
-
-  // Mapowanie etykiet stanu Vinted → status_id (stabilne globalnie).
   const STATUS_LABEL_TO_ID = {
     "new with tags": 1, "nowy z metką": 1, "nowy z metka": 1, "neu mit etikett": 1, "neuf avec étiquette": 1,
     "new without tags": 2, "nowy bez metki": 2, "neu ohne etikett": 2, "neuf sans étiquette": 2,
@@ -313,83 +268,37 @@
     "satisfactory": 4, "zadowalający": 4, "zadowalajacy": 4, "befriedigend": 4, "satisfaisant": 4,
   };
 
+  function valueId(v) { return typeof v === "object" && v !== null ? v.id : v; }
+  function valueTitle(v) { return typeof v === "object" && v !== null ? v.title : v; }
+
   function resolveStatusId(original) {
-    const direct = original.status_id
-      || valueId(original.status)
-      || original.condition_id
-      || valueId(original.condition);
+    const direct = original.status_id || valueId(original.status) || original.condition_id || valueId(original.condition);
     if (direct) return direct;
+    // Fallback z item_attributes[condition]
+    const condAttr = (original.item_attributes || []).find(a => a.code === "condition");
+    if (condAttr?.ids?.[0]) return condAttr.ids[0];
     const label = String(valueTitle(original.status) || original.status || original.condition || "").trim().toLowerCase();
-    if (label && STATUS_LABEL_TO_ID[label]) return STATUS_LABEL_TO_ID[label];
-    return null;
+    return STATUS_LABEL_TO_ID[label] || null;
   }
 
-  // ===== Ponowne wystawianie =====
-  async function getUploadContext() {
-    const res = await vintedRaw("/items/new", {
-      skipXRequestedWith: true,
-      headers: { Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
-    });
-    const text = res?.text || "";
-    if (!res?.ok) throw new Error(`Nie mogę otworzyć formularza dodawania (${res?.status || "brak statusu"})`);
-    const uploadSessionId = text.match(/\\"uploadSessionId\\"\s*:\s*\\"([^\\]+)\\"/i)?.[1]
-      || text.match(/"uploadSessionId"\s*:\s*"([^"]+)"/i)?.[1]
-      || text.match(/uploadSessionId["\\:]+([^"\\]+)["\\]?/i)?.[1];
-    const csrfToken = readCsrfTokenFromText(text) || readCsrfToken();
-    if (!uploadSessionId) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak uploadSessionId)");
-    if (!csrfToken) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak CSRF tokenu)");
-    return { uploadSessionId, csrfToken };
+  // Synchronizacja status_id <-> item_attributes[condition] — jak CZ() w Dotb
+  function syncConditionAttr(draft) {
+    const statusId = draft.status_id;
+    const attrs = draft.item_attributes ?? [];
+    const condAttr = attrs.find(a => a.code === "condition");
+    if (statusId && condAttr === undefined) return { ...draft, item_attributes: [...attrs, { code: "condition", ids: [statusId] }] };
+    if (!statusId && condAttr?.ids?.[0]) return { ...draft, status_id: condAttr.ids[0] };
+    return draft;
   }
 
-  async function uploadPhotoDataUrl(dataUrl, _tempUuid, csrfToken) {
-    const res = await pageUploadPhoto(dataUrl, csrfToken);
-
-    if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
-    const j = res.json;
-    const id = j?.photo?.id ?? j?.id;
-    if (!id) throw new Error("Vinted nie zwrócił ID zdjęcia");
-    return id;
-  }
-
-  function compact(value) {
-    if (Array.isArray(value)) return value.filter((x) => x !== undefined && x !== null && x !== "");
-    return Object.fromEntries(
-      Object.entries(value).filter(([, v]) => v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && v.length === 0)),
-    );
-  }
-
-  function valueId(value) {
-    return typeof value === "object" && value !== null ? value.id : value;
-  }
-
-  function valueTitle(value) {
-    return typeof value === "object" && value !== null ? value.title : value;
-  }
-
-  function extractColorIds(original) {
-    if (Array.isArray(original.color_ids)) return original.color_ids;
-    return [valueId(original.color1), valueId(original.color2), original.color1_id, original.color2_id, original.color_id].filter(Boolean);
-  }
-
-  function extractConditionIds(original) {
-    const fromAttrs = Array.isArray(original.item_attributes)
-      ? original.item_attributes.find((a) => a?.code === "condition" || a?.item_attribute_id === "condition")
-      : null;
-    const ids = fromAttrs?.ids || fromAttrs?.item_attribute_option_ids || original.condition_ids;
-    if (Array.isArray(ids) && ids.length) return ids;
-    return [original.status_id || valueId(original.status)].filter(Boolean);
-  }
-
-  function cleanPayload(value) {
-    if (Array.isArray(value)) return value.map(cleanPayload).filter((x) => x !== undefined && x !== "");
-    if (value && typeof value === "object") {
-      return Object.fromEntries(
-        Object.entries(value)
-          .map(([k, v]) => [k, cleanPayload(v)])
-          .filter(([, v]) => v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0)),
-      );
-    }
-    return value;
+  // Synchronizacja size_id <-> item_attributes[size] — jak NZ() w Dotb
+  function syncSizeAttr(draft) {
+    const sizeId = draft.size_id;
+    const attrs = draft.item_attributes ?? [];
+    const sizeAttr = attrs.find(a => a.code === "size");
+    if (sizeId && sizeAttr === undefined) return { ...draft, item_attributes: [...attrs, { code: "size", ids: [sizeId] }] };
+    if (!sizeId && sizeAttr?.ids?.[0]) return { ...draft, size_id: sizeAttr.ids[0] };
+    return draft;
   }
 
   async function deleteOldItem(itemId) {
@@ -403,54 +312,28 @@
         const res = await vintedRaw(attempt.path, attempt.init);
         if (res.ok) return true;
         last = `${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`;
-      } catch (e) {
-        last = e?.message || String(e);
-      }
+      } catch (e) { last = e?.message || String(e); }
     }
-    throw new Error(`nowe ogłoszenie dodane, ale nie udało się usunąć starego (${last})`);
+    throw new Error(`nie udało się usunąć starego (${last})`);
   }
 
-  // Synchronizacja status_id <-> item_attributes[condition] (jak CZ() w Dotb)
-  function syncConditionAttr(draft) {
-    const statusId = draft.status_id;
-    const attrs = draft.item_attributes ?? [];
-    const condAttr = attrs.find((a) => a.code === "condition");
-    if (statusId && condAttr === undefined) {
-      return { ...draft, item_attributes: [...attrs, { code: "condition", ids: [statusId] }] };
-    } else if (!statusId && condAttr?.ids?.[0]) {
-      return { ...draft, status_id: condAttr.ids[0] };
-    }
-    return draft;
+  async function uploadPhotoDataUrl(dataUrl, csrfToken) {
+    const res = await pageUploadPhoto(dataUrl, csrfToken);
+    if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
+    const id = res.json?.photo?.id ?? res.json?.id;
+    if (!id) throw new Error("Vinted nie zwrócił ID zdjęcia");
+    return id;
   }
 
-  // Synchronizacja size_id <-> item_attributes[size] (jak NZ() w Dotb)
-  function syncSizeAttr(draft) {
-    const sizeId = draft.size_id;
-    const attrs = draft.item_attributes ?? [];
-    const sizeAttr = attrs.find((a) => a.code === "size");
-    if (sizeId && sizeAttr === undefined) {
-      return { ...draft, item_attributes: [...attrs, { code: "size", ids: [sizeId] }] };
-    } else if (!sizeId && sizeAttr?.ids?.[0]) {
-      return { ...draft, size_id: sizeAttr.ids[0] };
-    }
-    return draft;
-  }
-
-  // Budowa payloadu draftu — odpowiednik funkcji yu() z referencyjnej wtyczki Dotb.
-  function buildDraftPayload({ original, price, currency, photoIds, tempUuid }) {
+  // Buduje draft — jak ab()/yu() w Dotb, z syncConditionAttr + syncSizeAttr
+  function buildDraft({ original, price, currency, photoIds }) {
     const statusId = resolveStatusId(original);
-    if (!statusId) {
-      throw new Error("Brak stanu przedmiotu (status_id) w danych źródłowych");
-    }
-    const finalCurrency = currency
-      || original.currency
-      || original.price?.currency_code
-      || original.price?.currency
-      || "PLN";
+    if (!statusId) throw new Error("Brak stanu przedmiotu (status_id)");
+    const finalCurrency = currency || original.currency || original.price?.currency_code || "PLN";
     const draft = {
       id: null,
       currency: finalCurrency,
-      temp_uuid: tempUuid,
+      temp_uuid: newUuid(),
       title: original.title || "",
       description: original.description || original.title || "",
       brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand) || null,
@@ -458,15 +341,16 @@
       size_id: original.size_id || valueId(original.size) || null,
       catalog_id: original.catalog_id || valueId(original.catalog) || null,
       isbn: original.isbn || null,
-      is_unisex: !!original.is_unisex,
+      is_unisex: original.is_unisex === true || original.is_unisex === 1,
       status_id: statusId,
       video_game_rating_id: original.video_game_rating_id ?? null,
       ai_photo: false,
       price: Number(price),
       package_size_id: original.package_size_id || valueId(original.package_size) || null,
       shipment_prices: { domestic: null, international: null },
-      color_ids: [original.color1_id, original.color2_id].filter((c) => c !== null && c !== undefined),
-      assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
+      // Dotb: color_ids z color1_id i color2_id
+      color_ids: [original.color1_id, original.color2_id].filter(c => c != null),
+      assigned_photos: photoIds.map(id => ({ id, orientation: 0 })),
       item_attributes: original.item_attributes || [],
       measurement_length: original.measurement_length ?? null,
       measurement_width: original.measurement_width ?? null,
@@ -477,66 +361,61 @@
     return syncSizeAttr(syncConditionAttr(draft));
   }
 
-
-  // ===== Ponowne wystawianie (3-stopniowy flow z draftami, jak Dotb) =====
-  // 1) POST  api.vinted.{tld}/api/v2/photos                          → upload zdjęć (FormData)
-  // 2) POST  api.vinted.{tld}/api/v2/item_upload/drafts              → utworzenie draftu
-  // 3) POST  api.vinted.{tld}/api/v2/item_upload/drafts/:id/completion → publikacja
+  // ===== Ponowne wystawianie — flow identyczny z Dotb =====
+  // 1) POST /api/v2/photos (same-origin)          → upload zdjęć
+  // 2) POST /api/v2/item_upload/drafts (same-origin) → stworzenie draftu
+  // 3) GET  /api/v2/item_upload/items/{draftId}   → odświeżenie draftu (Ku())
+  // 4) POST /api/v2/item_upload/drafts/{id}/completion → publikacja (nde/v9())
+  // 5) DELETE starego ogłoszenia
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
-    const tempUuid = newUuid();
     const csrfToken = readCsrfToken();
 
-    // 1) Upload zdjęć — endpoint /api/v2/photos na api.vinted.{tld}
+    // 1) Upload zdjęć — każde dostaje własne UUID
     const photoIds = [];
     for (const p of photos) {
-      const id = await uploadPhotoDataUrl(p, tempUuid, csrfToken);
+      const id = await uploadPhotoDataUrl(p, csrfToken);
       if (id) photoIds.push(id);
     }
-    if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
+    if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć");
 
-    // 2) Utworzenie draftu
-    const draft = buildDraftPayload({ original, price, currency, photoIds, tempUuid });
-    const draftRes = await vintedApiHost(`/api/v2/item_upload/drafts`, {
+    // 2) Stworzenie draftu
+    const draft = buildDraft({ original, price, currency, photoIds });
+    const draftRes = await vintedApi(`/api/v2/item_upload/drafts`, {
       method: "POST",
-      headers: { "X-CSRF-Token": csrfToken || "" },
       csrfToken,
-      body: JSON.stringify({
-        draft,
-        feedback_id: null,
-        parcel: null,
-        upload_session_id: tempUuid,
-      }),
+      body: JSON.stringify({ draft, feedback_id: null, parcel: null, upload_session_id: draft.temp_uuid }),
     });
     const createdDraft = draftRes?.draft || draftRes;
     const draftId = createdDraft?.id;
     if (!draftId) throw new Error("Vinted nie zwrócił ID draftu");
 
-    // 3) Publikacja draftu — completion zwraca finalny item
-    const completedRes = await vintedApiHost(`/api/v2/item_upload/drafts/${draftId}/completion`, {
+    // 3) Odświeżenie draftu (jak Ku() w Dotb)
+    await new Promise(r => setTimeout(r, 500));
+    let refreshedDraft;
+    try {
+      const r = await vintedRaw(`/api/v2/item_upload/items/${draftId}`, {});
+      refreshedDraft = r?.json?.item || r?.json || createdDraft;
+    } catch {
+      refreshedDraft = createdDraft;
+    }
+
+    // 4) Publikacja — POST /completion z odświeżonym draftem (jak nde/v9() w Dotb)
+    const publishDraft = buildDraft({ original: { ...original, ...refreshedDraft }, price, currency, photoIds });
+    publishDraft.id = draftId;
+    const completedRes = await vintedApi(`/api/v2/item_upload/drafts/${draftId}/completion`, {
       method: "POST",
-      headers: { "X-CSRF-Token": csrfToken || "" },
       csrfToken,
-      body: JSON.stringify({
-        draft: { ...draft, id: draftId },
-        feedback_id: null,
-        parcel: null,
-        push_up: false,
-        upload_session_id: tempUuid,
-      }),
+      body: JSON.stringify({ draft: publishDraft, feedback_id: null, parcel: null, push_up: false, upload_session_id: publishDraft.temp_uuid }),
     });
     const newId = completedRes?.item?.id ?? completedRes?.id;
     if (!newId) throw new Error("Vinted przyjął draft, ale nie zwrócił ID opublikowanego ogłoszenia");
 
-    // 4) Usunięcie starego ogłoszenia (dopiero po sukcesie publikacji nowego)
-    let deletedOld = false;
-    let deleteError = null;
-    try {
-      await deleteOldItem(original.id);
-      deletedOld = true;
-    } catch (e) {
-      deleteError = e?.message || String(e);
-    }
+    // 5) Usunięcie starego
+    let deletedOld = false, deleteError = null;
+    try { await deleteOldItem(original.id); deletedOld = true; }
+    catch (e) { deleteError = e?.message || String(e); }
+
     return { newId, deletedOld, deleteError };
   }
 
@@ -549,6 +428,7 @@
     if (rule.matchType === "regex") { try { return new RegExp(rule.pattern, "i").test(text); } catch { return false; } }
     return t.includes(p);
   }
+
   async function runReplies() {
     const { settings } = await chrome.storage.local.get(["settings"]);
     const rules = settings?.replies ?? [];
@@ -569,12 +449,9 @@
         }).catch((e) => console.warn("[VM] reply fail", e));
         await new Promise((r) => setTimeout(r, 2000));
       }
-    } catch (e) {
-      console.warn("[VM] replies err", e);
-    }
+    } catch (e) { console.warn("[VM] replies err", e); }
   }
 
-  // ===== Sync z panelem =====
   async function syncToPanel() {
     const { username, userId, items } = await fetchMyItems();
     const resp = await chrome.runtime.sendMessage({
@@ -602,96 +479,6 @@
     return { count: items.length, username, ...resp.r };
   }
 
-  // ===== Form-driven relisting (v0.6.0) =====
-  let rfSeq = 0;
-  function formBridge(action, payload = {}, timeout = 8000) {
-    const id = `vmrf-${Date.now()}-${++rfSeq}`;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        window.removeEventListener("message", onMsg);
-        reject(new Error(`form-bridge ${action} timeout`));
-      }, timeout);
-      function onMsg(ev) {
-        if (ev.source !== window) return;
-        const m = ev.data;
-        if (!m || m.source !== "VM_RF_RES" || m.id !== id) return;
-        clearTimeout(timer);
-        window.removeEventListener("message", onMsg);
-        if (!m.ok) reject(new Error(m.error || `form-bridge ${action} failed`));
-        else resolve(m.data);
-      }
-      window.addEventListener("message", onMsg);
-      window.postMessage({ source: "VM_RF_REQ", id, action, ...payload }, origin);
-    });
-  }
-
-  async function waitForFormReady(maxMs = 30000) {
-    const t0 = Date.now();
-    while (Date.now() - t0 < maxMs) {
-      try {
-        const r = await formBridge("ping", {}, 2000);
-        if (r?.ready) return true;
-      } catch {}
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    throw new Error("Formularz Vinted nie załadował się w 30s");
-  }
-
-  function pickStatusLabelId(state, original) {
-    // wybierz status_id na podstawie oryginalnego ogłoszenia + opcji w formularzu
-    const id = resolveStatusId(original);
-    return id || null;
-  }
-
-  async function fillAndSubmit({ original, price, currency, photos }) {
-    await waitForFormReady();
-    const state = await formBridge("read", {});
-    if (!state) throw new Error("Brak stanu formularza Vinted");
-
-    // 1) upload zdjęć (page-bridge musi już być w MAIN world — wstrzykuje go background)
-    const tempUuid = state?.uploadSessionId || state?.tempUuid || newUuid();
-    const csrfToken = readCsrfToken();
-    const photoIds = [];
-    for (const p of photos) {
-      const id = await uploadPhotoDataUrl(p, tempUuid, csrfToken);
-      if (id) photoIds.push(id);
-    }
-    if (!photoIds.length) throw new Error("Nie udało się wgrać żadnego zdjęcia");
-
-    // 2) zbuduj partial state — używamy tylko pól istniejących w state, plus assignedPhotos
-    const colorIds = extractColorIds(original);
-    const statusId = pickStatusLabelId(state, original);
-    const partial = {
-      title: original.title || state.title || "",
-      description: original.description || state.description || "",
-      price: Number(price),
-      currency: currency || original.currency || state.currency,
-      catalogId: original.catalog_id || valueId(original.catalog) || state.catalogId,
-      brandId: original.brand_id || valueId(original.brand_dto) || valueId(original.brand) || state.brandId,
-      brandTitle: original.brand_title || valueTitle(original.brand_dto) || valueTitle(original.brand) || state.brandTitle,
-      sizeId: original.size_id || valueId(original.size) || state.sizeId,
-      colorIds: colorIds.length ? colorIds : state.colorIds,
-      packageSizeId: original.package_size_id || valueId(original.package_size) || state.packageSizeId,
-      statusId: statusId || state.statusId,
-      isUnisex: !!original.is_unisex,
-      isForSwap: !!original.is_for_swap,
-      assignedPhotos: photoIds.map((id) => ({ id, orientation: 0 })),
-    };
-    // usuń puste klucze, żeby nie nadpisać dobrej wartości undefinedem
-    Object.keys(partial).forEach((k) => {
-      if (partial[k] === undefined || partial[k] === null || partial[k] === "") delete partial[k];
-    });
-    await formBridge("write", { partial }, 5000);
-
-    // 3) wymuś też wartość pól tekstowych przez natywne settery (React + walidacja onBlur)
-    await formBridge("setInput", { selector: '[data-testid="price-input--input"]', value: String(partial.price) }, 3000).catch(() => {});
-
-    // 4) klik save
-    await new Promise((r) => setTimeout(r, 500));
-    await formBridge("clickSave", {}, 5000);
-    return { ok: true, expectedTitle: partial.title };
-  }
-
   async function deleteItemById(id) {
     await deleteOldItem(id);
     return { ok: true };
@@ -700,7 +487,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS", "FETCH_ITEMS_V2", "FETCH_ITEM_DETAIL", "FETCH_ITEM_DETAIL_V2", "RELIST_ITEM", "RELIST_ITEM_V2", "RUN_REPLIES", "RUN_REPLIES_V2", "SYNC_NOW", "SYNC_NOW_V2", "FILL_AND_SUBMIT_V2", "DELETE_ITEM_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","RELIST_ITEM","RELIST_ITEM_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
@@ -709,14 +496,10 @@
           sendResponse({ ok: true, username: me?.login, userId: me?.id, photo: me?.photo?.url });
         }
         else if (msg.kind === "FETCH_ITEM_DETAIL" || msg.kind === "FETCH_ITEM_DETAIL_V2") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
-        else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") {
-          sendResponse({ ok: true, ...(await relistItem(msg)) });
-        } else if (msg.kind === "FILL_AND_SUBMIT_V2") {
-          sendResponse({ ok: true, ...(await fillAndSubmit(msg)) });
-        } else if (msg.kind === "DELETE_ITEM_V2") {
-          sendResponse({ ok: true, ...(await deleteItemById(msg.id)) });
-        } else if (msg.kind === "RUN_REPLIES" || msg.kind === "RUN_REPLIES_V2") { await runReplies(); sendResponse({ ok: true }); }
+        else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
+        else if (msg.kind === "RUN_REPLIES" || msg.kind === "RUN_REPLIES_V2") { await runReplies(); sendResponse({ ok: true }); }
         else if (msg.kind === "SYNC_NOW" || msg.kind === "SYNC_NOW_V2") sendResponse({ ok: true, ...(await syncToPanel()) });
+        else if (msg.kind === "DELETE_ITEM_V2") sendResponse({ ok: true, ...(await deleteItemById(msg.id)) });
       } catch (e) {
         sendResponse({ ok: false, error: e.message });
       }
@@ -724,7 +507,6 @@
     return true;
   });
 
-  // Sync/auto-reply działa tylko po zalogowaniu wtyczki przez Google.
   ensureExtensionSignedIn()
     .then(() => {
       syncToPanel().catch((e) => console.warn("[VM] sync err", e));
@@ -735,7 +517,7 @@
     .catch(() => {});
 
   // ===================================================================
-  // SIDEBAR DRAWER — pasek z prawej + rozsuwany panel (iframe panel.html)
+  // SIDEBAR DRAWER
   // ===================================================================
   function injectSidebar() {
     if (document.getElementById("vm-sidebar-root")) return;
@@ -761,13 +543,10 @@
         #vm-sidebar-root.open #vm-handle { right:12px; top:18px; height:44px; transform:none; border-radius:8px; z-index:2147483647; }
         #vm-drawer iframe { flex:1; width:100%; border:0; background:#0f1420; }
       </style>
-      <div id="vm-handle" title="Vinted Manager">
-        <span id="vm-arrow">‹</span>
-      </div>
+      <div id="vm-handle" title="Vinted Manager"><span id="vm-arrow">‹</span></div>
       <div id="vm-drawer"></div>
     `;
     document.documentElement.appendChild(root);
-
     const drawer = root.querySelector("#vm-drawer");
     const handle = root.querySelector("#vm-handle");
     const arrow = root.querySelector("#vm-arrow");
@@ -784,9 +563,6 @@
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", injectSidebar);
-  } else {
-    injectSidebar();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", injectSidebar);
+  else injectSidebar();
 })();
