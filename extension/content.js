@@ -1,7 +1,9 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  if (window.__VM_CONTENT_LOADED__) return;
+  const CONTENT_VERSION = "0.5.8";
+  if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
+  window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
 
   const host = location.hostname.replace(/^www\./, "");
   const country = host.split(".").pop();
@@ -481,19 +483,19 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS", "FETCH_ITEM_DETAIL", "RELIST_ITEM", "RUN_REPLIES", "SYNC_NOW"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS", "FETCH_ITEMS_V2", "FETCH_ITEM_DETAIL", "FETCH_ITEM_DETAIL_V2", "RELIST_ITEM", "RELIST_ITEM_V2", "RUN_REPLIES", "RUN_REPLIES_V2", "SYNC_NOW", "SYNC_NOW_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
-        if (msg.kind === "FETCH_ITEMS") sendResponse({ ok: true, ...(await fetchMyItems()) });
-        else if (msg.kind === "GET_ME") {
+        if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
+        else if (msg.kind === "GET_ME" || msg.kind === "GET_ME_V2") {
           const me = await getMe();
           sendResponse({ ok: true, username: me?.login, userId: me?.id, photo: me?.photo?.url });
         }
-        else if (msg.kind === "FETCH_ITEM_DETAIL") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
-        else if (msg.kind === "RELIST_ITEM") {
+        else if (msg.kind === "FETCH_ITEM_DETAIL" || msg.kind === "FETCH_ITEM_DETAIL_V2") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
+        else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") {
           sendResponse({ ok: true, ...(await relistItem(msg)) });
-        } else if (msg.kind === "RUN_REPLIES") { await runReplies(); sendResponse({ ok: true }); }
-        else if (msg.kind === "SYNC_NOW") sendResponse({ ok: true, ...(await syncToPanel()) });
+        } else if (msg.kind === "RUN_REPLIES" || msg.kind === "RUN_REPLIES_V2") { await runReplies(); sendResponse({ ok: true }); }
+        else if (msg.kind === "SYNC_NOW" || msg.kind === "SYNC_NOW_V2") sendResponse({ ok: true, ...(await syncToPanel()) });
       } catch (e) {
         sendResponse({ ok: false, error: e.message });
       }
