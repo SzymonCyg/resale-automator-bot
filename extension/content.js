@@ -359,16 +359,17 @@
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
     const { uploadSessionId, csrfToken } = await getUploadContext();
+    const tempUuid = uploadSessionId || newUuid();
     const photoIds = [];
     for (const p of photos) {
-      const id = await uploadPhotoDataUrl(p, newUuid(), csrfToken);
+      const id = await uploadPhotoDataUrl(p, tempUuid, csrfToken);
       if (id) photoIds.push(id);
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
     const item = cleanPayload({
       id: null,
-      temp_uuid: newUuid(),
+      temp_uuid: tempUuid,
       title: original.title,
       description: original.description || original.title || "",
       price: Number(price),
@@ -406,6 +407,7 @@
         "X-Upload-Form": "true",
         "X-Enable-Dynamic-Attribute-Condition": "true",
         "X-Enable-Dynamic-Attribute-Video-Game-Rating": "true",
+        "X-Enable-Multiple-Size-Groups": "true",
         "X-CSRF-Token": csrfToken,
       },
       referrer: `${origin}/items/new`,
