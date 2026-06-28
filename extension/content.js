@@ -384,8 +384,8 @@
         "X-Upload-Form": "true",
         "X-Enable-Dynamic-Attribute-Condition": "true",
         "X-Enable-Dynamic-Attribute-Video-Game-Rating": "true",
-        Referer: `${origin}/items/new`,
       },
+      referrer: `${origin}/items/new`,
       body: JSON.stringify(body),
     });
     const newId = created?.item?.id ?? created?.id;

@@ -67,6 +67,7 @@
           headers,
           credentials: "include",
           mode: "cors",
+          referrer: new URL("/items/new", window.location.origin).toString(),
           body: form,
         });
 
@@ -102,6 +103,9 @@
         headers,
         credentials: "include",
         mode: init.mode || "cors",
+        referrer: init.referrer || (String(url.pathname).includes("/api/v2/item_upload/items")
+          ? new URL("/items/new", window.location.origin).toString()
+          : undefined),
       });
 
       window.postMessage(
