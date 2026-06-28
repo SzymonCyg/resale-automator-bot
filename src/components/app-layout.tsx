@@ -184,8 +184,8 @@ function SubLink({
   active,
   onNavigate,
 }: {
-  to: string;
-  params: Record<string, string>;
+  to: "/accounts/$accountId/items" | "/accounts/$accountId/auto-bump" | "/accounts/$accountId/auto-reply" | "/accounts/$accountId/logs";
+  params: { accountId: string };
   icon: ReactNode;
   children: ReactNode;
   active: boolean;
@@ -193,7 +193,6 @@ function SubLink({
 }) {
   return (
     <Link
-      // @ts-expect-error dynamic params
       to={to}
       params={params}
       onClick={onNavigate}
