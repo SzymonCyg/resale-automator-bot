@@ -59,8 +59,6 @@ function renderRules() {
 async function load() {
   const { settings } = await chrome.storage.local.get(["settings"]);
   const s = settings || {};
-  $("bumpEnabled").checked = !!s.bumpEnabled;
-  $("bumpInterval").value = s.bumpIntervalHours || 8;
   rules = Array.isArray(s.replies) ? [...s.replies] : [];
   renderRules();
 }
@@ -72,8 +70,6 @@ $("addRule").addEventListener("click", () => {
 
 $("save").addEventListener("click", async () => {
   const settings = {
-    bumpEnabled: $("bumpEnabled").checked,
-    bumpIntervalHours: Math.max(3, Math.min(168, Number($("bumpInterval").value) || 8)),
     replies: rules.filter((r) => r.pattern && r.response),
   };
   await chrome.runtime.sendMessage({ kind: "SAVE_SETTINGS", settings });
