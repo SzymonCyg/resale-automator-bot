@@ -1,7 +1,24 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
+  if (window.__VM_CONTENT_LOADED__) return;
+  window.__VM_CONTENT_LOADED__ = true;
+
   const host = location.hostname.replace(/^www\./, "");
   const country = host.split(".").pop();
+  const origin = location.origin;
+  const requestPrefix = `vm-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let requestSeq = 0;
+
+  function injectPageBridge() {
+    if (document.getElementById("vm-page-bridge")) return;
+    const script = document.createElement("script");
+    script.id = "vm-page-bridge";
+    script.src = chrome.runtime.getURL("page-bridge.js");
+    script.async = false;
+    (document.head || document.documentElement).appendChild(script);
+  }
+
+  injectPageBridge();
 
   function getCookie(name) {
     return document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith(name + "="))?.split("=")[1];
@@ -10,53 +27,156 @@
   function buildHeaders(init = {}, hasBody = false) {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const anon = getCookie("anon_id") || getCookie("anonymous-locale") || "";
+    const accessToken = getCookie("access_token_web");
     const h = {
       Accept: "application/json, text/plain, */*",
       "X-CSRF-Token": csrf || "",
+      "X-Requested-With": "XMLHttpRequest",
       ...(anon ? { "X-Anon-Id": decodeURIComponent(anon) } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${decodeURIComponent(accessToken)}` } : {}),
       ...(init.headers || {}),
     };
     if (hasBody && !h["Content-Type"]) h["Content-Type"] = "application/json";
     return h;
   }
 
-  async function vintedApi(path, init = {}) {
-    const hasBody = !!init.body;
-    const res = await fetch(`https://${host}${path}`, {
-      credentials: "include",
-      ...init,
-      headers: buildHeaders(init, hasBody),
+  function pageFetch(path, init = {}) {
+    const id = `${requestPrefix}-${++requestSeq}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener("message", onMessage);
+        reject(new Error("Timeout połączenia z Vinted"));
+      }, 20000);
+
+      function onMessage(event) {
+        if (event.source !== window) return;
+        const msg = event.data;
+        if (!msg || msg.source !== "VM_PAGE_BRIDGE" || msg.id !== id) return;
+        clearTimeout(timer);
+        window.removeEventListener("message", onMessage);
+        if (!msg.ok) reject(new Error(msg.error || "Vinted fetch failed"));
+        else resolve(msg.response);
+      }
+
+      window.addEventListener("message", onMessage);
+      window.postMessage({
+        source: "VM_CONTENT",
+        kind: "FETCH",
+        id,
+        path,
+        init: {
+          ...init,
+          headers: buildHeaders(init, !!init.body),
+        },
+      }, origin);
     });
-    if (!res.ok) throw new Error(`Vinted ${res.status}`);
-    return res.json();
+  }
+
+  async function vintedApi(path, init = {}) {
+    const res = await pageFetch(path, init);
+    if (!res.ok) throw new Error(`Vinted ${res.status}${res.text ? `: ${res.text.slice(0, 120)}` : ""}`);
+    return res.json;
   }
 
   async function vintedRaw(path, init = {}) {
-    return fetch(`https://${host}${path}`, {
-      credentials: "include",
-      ...init,
-      headers: buildHeaders(init, !!init.body),
-    });
+    return pageFetch(path, init);
+  }
+
+  function findUserInObject(value, depth = 0) {
+    if (!value || depth > 5) return null;
+    if (Array.isArray(value)) {
+      for (const item of value.slice(0, 25)) {
+        const found = findUserInObject(item, depth + 1);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (typeof value !== "object") return null;
+    const id = value.id ?? value.user_id ?? value.userId;
+    const login = value.login ?? value.username ?? value.user_login ?? value.userName;
+    if (id && login && typeof login === "string" && !/zaloguj|signup|login/i.test(login)) {
+      return { id: String(id), login };
+    }
+    for (const key of Object.keys(value).slice(0, 80)) {
+      if (/owner|seller|buyer/.test(key)) continue;
+      const found = findUserInObject(value[key], depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function parseUserFromStorage() {
+    const stores = [window.localStorage, window.sessionStorage];
+    for (const store of stores) {
+      for (let i = 0; i < store.length; i += 1) {
+        const key = store.key(i) || "";
+        const raw = store.getItem(key) || "";
+        if (raw.length > 1_500_000) continue;
+        if (!/(user|member|session|auth|current|profile|account)/i.test(key + raw.slice(0, 400))) continue;
+        try {
+          const found = findUserInObject(JSON.parse(raw));
+          if (found) return found;
+        } catch {
+          const m = raw.match(/"(?:id|user_id|userId)"\s*:\s*"?(\d+)"?[\s\S]{0,500}"(?:login|username)"\s*:\s*"([^"\\]+)"/i)
+            || raw.match(/"(?:login|username)"\s*:\s*"([^"\\]+)"[\s\S]{0,500}"(?:id|user_id|userId)"\s*:\s*"?(\d+)"?/i);
+          if (m) return m[2] && /^\d+$/.test(m[1]) ? { id: m[1], login: m[2] } : { id: m[2], login: m[1] };
+        }
+      }
+    }
+    return null;
+  }
+
+  function parseUserFromDom() {
+    const roots = [document.querySelector("header"), document.querySelector(".l-header"), document.body].filter(Boolean);
+    for (const root of roots) {
+      const links = [...root.querySelectorAll('a[href*="/member/"]')];
+      for (const a of links) {
+        const href = a.getAttribute("href") || "";
+        if (/signup|login|help|items\/new/.test(href)) continue;
+        const m = href.match(/\/member\/(\d+)-([^/?#]+)/);
+        if (m) return { id: m[1], login: decodeURIComponent(m[2]) };
+      }
+    }
+    const html = document.documentElement.innerHTML.slice(0, 2_000_000);
+    const m = html.match(/"current_user"\s*:\s*\{[\s\S]{0,2500}?"id"\s*:\s*(\d+)[\s\S]{0,2500}?"login"\s*:\s*"([^"\\]+)"/i)
+      || html.match(/"viewer"\s*:\s*\{[\s\S]{0,2500}?"id"\s*:\s*(\d+)[\s\S]{0,2500}?"login"\s*:\s*"([^"\\]+)"/i);
+    if (m) return { id: m[1], login: m[2] };
+    return null;
   }
 
   async function getMe() {
-    const me = await vintedApi("/api/v2/users/current");
-    return me?.user;
+    const endpoints = ["/api/v2/users/current", "/api/v2/users/me"];
+    for (const endpoint of endpoints) {
+      try {
+        const me = await vintedApi(endpoint);
+        const user = me?.user ?? me?.current_user ?? me;
+        if (user?.id && (user.login || user.username)) {
+          return { ...user, login: user.login || user.username };
+        }
+      } catch (e) {
+        console.warn("[VM] getMe endpoint fail", endpoint, e);
+      }
+    }
+    const fallback = parseUserFromStorage() || parseUserFromDom();
+    if (fallback?.id && fallback?.login) return fallback;
+    throw new Error("Nie mogę odczytać konta Vinted — odśwież kartę Vinted po zalogowaniu");
   }
 
   async function fetchRawItems(userId) {
     // Vinted ma kilka endpointów — próbujemy po kolei.
     const tries = [
-      `/api/v2/wardrobe/${userId}/items?status=active&per_page=200`,
-      `/api/v2/users/${userId}/items?per_page=200`,
+      `/api/v2/wardrobe/${userId}/items?per_page=200&page=1&order=newest_first`,
+      `/api/v2/wardrobe/${userId}?per_page=200&page=1&order=newest_first`,
+      `/api/v2/wardrobe/${userId}/?per_page=200&page=1&order=newest_first`,
+      `/api/v2/users/${userId}/items?per_page=200&page=1`,
       `/api/v2/wardrobe-items?user_id=${userId}&per_page=200`,
     ];
     let lastErr;
     for (const path of tries) {
       try {
         const r = await vintedApi(path);
-        const arr = r?.items ?? r?.wardrobe_items ?? [];
-        if (Array.isArray(arr) && arr.length >= 0) return arr;
+        const arr = r?.items ?? r?.wardrobe_items ?? r?.user?.items ?? r?.data?.items;
+        if (Array.isArray(arr)) return arr;
       } catch (e) {
         lastErr = e;
       }
