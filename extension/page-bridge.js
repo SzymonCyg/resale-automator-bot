@@ -22,6 +22,8 @@
       ok: response.ok,
       status: response.status,
       statusText: response.statusText,
+      url: response.url,
+      redirected: response.redirected,
       text,
       json,
       contentType: response.headers.get("content-type") || "",
@@ -64,7 +66,7 @@
           method: "POST",
           headers,
           credentials: "include",
-          mode: "same-origin",
+          mode: "cors",
           body: form,
         });
 
@@ -88,12 +90,18 @@
         headers.set("Authorization", `Bearer ${decodeURIComponent(accessToken)}`);
       }
       if (!headers.has("X-Requested-With")) headers.set("X-Requested-With", "XMLHttpRequest");
+      if (!headers.has("Locale")) headers.set("Locale", document.documentElement.lang || navigator.language || "pl");
+      if (String(url.pathname).includes("/api/v2/item_upload/items")) {
+        headers.set("X-Upload-Form", "true");
+        headers.set("X-Enable-Dynamic-Attribute-Condition", "true");
+        headers.set("X-Enable-Dynamic-Attribute-Video-Game-Rating", "true");
+      }
 
       const response = await fetch(url.toString(), {
         ...init,
         headers,
         credentials: "include",
-        mode: "same-origin",
+        mode: init.mode || "cors",
       });
 
       window.postMessage(
@@ -102,7 +110,12 @@
       );
     } catch (error) {
       window.postMessage(
-        { source: "VM_PAGE_BRIDGE", id: msg.id, ok: false, error: error?.message || String(error) },
+        {
+          source: "VM_PAGE_BRIDGE",
+          id: msg.id,
+          ok: false,
+          error: `${msg.kind}${msg.path ? ` ${msg.path}` : ""}: ${error?.message || String(error)}`,
+        },
         window.location.origin,
       );
     }

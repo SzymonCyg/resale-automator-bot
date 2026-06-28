@@ -253,12 +253,17 @@
       headers: { Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
     });
     const text = res?.text || "";
+    if (!res?.ok) throw new Error(`Nie mogę otworzyć formularza dodawania (${res?.status || "brak statusu"})`);
+    const uploadSessionId = text.match(/\\"uploadSessionId\\"\s*:\s*\\"([^\\]+)\\"/i)?.[1]
+      || text.match(/"uploadSessionId"\s*:\s*"([^"]+)"/i)?.[1]
+      || text.match(/uploadSessionId["\\:]+([^"\\]+)["\\]?/i)?.[1];
     const tempUuid = text.match(/"tempUuid"\s*:\s*"([^"\\]+)"/i)?.[1]
       || text.match(/"temp_uuid"\s*:\s*"([^"\\]+)"/i)?.[1]
       || text.match(/tempUuid\s*[:=]\s*["']([^"']+)["']/i)?.[1]
       || crypto.randomUUID?.();
+    if (!uploadSessionId) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak uploadSessionId)");
     if (!tempUuid) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak tempUuid)");
-    return { tempUuid };
+    return { uploadSessionId, tempUuid };
   }
 
   async function uploadPhotoDataUrl(dataUrl, tempUuid) {
@@ -290,6 +295,27 @@
     return [valueId(original.color1), valueId(original.color2), original.color1_id, original.color2_id, original.color_id].filter(Boolean);
   }
 
+  function extractConditionIds(original) {
+    const fromAttrs = Array.isArray(original.item_attributes)
+      ? original.item_attributes.find((a) => a?.code === "condition" || a?.item_attribute_id === "condition")
+      : null;
+    const ids = fromAttrs?.ids || fromAttrs?.item_attribute_option_ids || original.condition_ids;
+    if (Array.isArray(ids) && ids.length) return ids;
+    return [original.status_id || valueId(original.status)].filter(Boolean);
+  }
+
+  function cleanPayload(value) {
+    if (Array.isArray(value)) return value.map(cleanPayload).filter((x) => x !== undefined && x !== "");
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value)
+          .map(([k, v]) => [k, cleanPayload(v)])
+          .filter(([, v]) => v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0)),
+      );
+    }
+    return value;
+  }
+
   async function deleteOldItem(itemId) {
     const attempts = [
       { path: `/api/v2/items/${itemId}`, init: { method: "DELETE" } },
@@ -310,7 +336,7 @@
 
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
-    const { tempUuid } = await getUploadContext();
+    const { uploadSessionId, tempUuid } = await getUploadContext();
     const photoIds = [];
     for (const p of photos) {
       const id = await uploadPhotoDataUrl(p, tempUuid);
@@ -318,8 +344,8 @@
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
-    const item = compact({
-      id: "null",
+    const item = cleanPayload({
+      id: null,
       temp_uuid: tempUuid,
       title: original.title,
       description: original.description || original.title || "",
@@ -334,18 +360,32 @@
       color_ids: extractColorIds(original),
       material_id: original.material_id,
       material_ids: original.material_ids,
-      item_attributes: original.item_attributes,
+      item_attributes: Array.isArray(original.item_attributes) && original.item_attributes.length
+        ? original.item_attributes
+        : [{ code: "condition", ids: extractConditionIds(original) }],
       isbn: original.isbn,
       is_unisex: !!original.is_unisex,
       is_for_swap: !!original.is_for_swap,
       is_for_sell: original.is_for_sell !== false,
-      shipment_prices: original.shipment_prices || { domestic: "null", international: "null" },
+      shipment_prices: original.shipment_prices || { domestic: null, international: null },
       assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
     });
 
-    const body = { item, feedback_id: null, push_up: false };
-    const created = await vintedApi(`/api/v2/items`, {
+    const body = {
+      item,
+      feedback_id: null,
+      push_up: false,
+      parcel: null,
+      upload_session_id: uploadSessionId,
+    };
+    const created = await vintedApi(`/api/v2/item_upload/items`, {
       method: "POST",
+      headers: {
+        "X-Upload-Form": "true",
+        "X-Enable-Dynamic-Attribute-Condition": "true",
+        "X-Enable-Dynamic-Attribute-Video-Game-Rating": "true",
+        Referer: `${origin}/items/new`,
+      },
       body: JSON.stringify(body),
     });
     const newId = created?.item?.id ?? created?.id;
