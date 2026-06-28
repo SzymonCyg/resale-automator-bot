@@ -67,6 +67,7 @@
           headers,
           credentials: "include",
           mode: "cors",
+          cache: "no-store",
           referrer: new URL("/items/new", window.location.origin).toString(),
           body: form,
         });
@@ -85,12 +86,13 @@
 
       const init = msg.init || {};
       const headers = new Headers(init.headers || {});
+      if (init.skipXRequestedWith) headers.delete("X-Requested-With");
       if (csrf && !headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", csrf);
       if (anon && !headers.has("X-Anon-Id")) headers.set("X-Anon-Id", decodeURIComponent(anon));
       if (accessToken && !headers.has("Authorization")) {
         headers.set("Authorization", `Bearer ${decodeURIComponent(accessToken)}`);
       }
-      if (!headers.has("X-Requested-With")) headers.set("X-Requested-With", "XMLHttpRequest");
+      if (!init.skipXRequestedWith && !headers.has("X-Requested-With")) headers.set("X-Requested-With", "XMLHttpRequest");
       if (!headers.has("Locale")) headers.set("Locale", document.documentElement.lang || navigator.language || "pl");
       if (String(url.pathname).includes("/api/v2/item_upload/items")) {
         headers.set("X-Upload-Form", "true");
@@ -103,6 +105,7 @@
         headers,
         credentials: "include",
         mode: init.mode || "cors",
+        cache: init.cache || "no-store",
         referrer: init.referrer || (String(url.pathname).includes("/api/v2/item_upload/items")
           ? new URL("/items/new", window.location.origin).toString()
           : undefined),
