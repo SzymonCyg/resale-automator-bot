@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vinted Manager Helper",
-  "version": "0.5.9",
+  "version": "0.6.0",
   "description": "Panel do zarządzania kontami Vinted: podgląd przedmiotów, ponowne wystawianie z edycją zdjęć i cen, auto-odpowiedzi.",
   "permissions": ["storage", "alarms", "activeTab", "tabs", "scripting"],
   "host_permissions": [
@@ -45,11 +45,27 @@
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.vinted.pl/items/new*",
+        "https://*.vinted.fr/items/new*",
+        "https://*.vinted.de/items/new*",
+        "https://*.vinted.es/items/new*",
+        "https://*.vinted.it/items/new*",
+        "https://*.vinted.nl/items/new*",
+        "https://*.vinted.cz/items/new*",
+        "https://*.vinted.sk/items/new*",
+        "https://*.vinted.co.uk/items/new*"
+      ],
+      "js": ["react-form-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["panel.html", "panel.css", "panel.js", "page-bridge.js"],
+      "resources": ["panel.html", "panel.css", "panel.js", "page-bridge.js", "react-form-bridge.js"],
       "matches": [
         "https://*.vinted.pl/*", "https://*.vinted.fr/*", "https://*.vinted.de/*",
         "https://*.vinted.es/*", "https://*.vinted.it/*", "https://*.vinted.nl/*",

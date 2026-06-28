@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.5.8";
+  const CONTENT_VERSION = "0.6.0";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -519,10 +519,105 @@
     return { count: items.length, username, ...resp.r };
   }
 
+  // ===== Form-driven relisting (v0.6.0) =====
+  let rfSeq = 0;
+  function formBridge(action, payload = {}, timeout = 8000) {
+    const id = `vmrf-${Date.now()}-${++rfSeq}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener("message", onMsg);
+        reject(new Error(`form-bridge ${action} timeout`));
+      }, timeout);
+      function onMsg(ev) {
+        if (ev.source !== window) return;
+        const m = ev.data;
+        if (!m || m.source !== "VM_RF_RES" || m.id !== id) return;
+        clearTimeout(timer);
+        window.removeEventListener("message", onMsg);
+        if (!m.ok) reject(new Error(m.error || `form-bridge ${action} failed`));
+        else resolve(m.data);
+      }
+      window.addEventListener("message", onMsg);
+      window.postMessage({ source: "VM_RF_REQ", id, action, ...payload }, origin);
+    });
+  }
+
+  async function waitForFormReady(maxMs = 30000) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < maxMs) {
+      try {
+        const r = await formBridge("ping", {}, 2000);
+        if (r?.ready) return true;
+      } catch {}
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error("Formularz Vinted nie załadował się w 30s");
+  }
+
+  function pickStatusLabelId(state, original) {
+    // wybierz status_id na podstawie oryginalnego ogłoszenia + opcji w formularzu
+    const id = resolveStatusId(original);
+    return id || null;
+  }
+
+  async function fillAndSubmit({ original, price, currency, photos }) {
+    await waitForFormReady();
+    const state = await formBridge("read", {});
+    if (!state) throw new Error("Brak stanu formularza Vinted");
+
+    // 1) upload zdjęć (page-bridge musi już być w MAIN world — wstrzykuje go background)
+    const tempUuid = state?.uploadSessionId || state?.tempUuid || newUuid();
+    const csrfToken = readCsrfToken();
+    const photoIds = [];
+    for (const p of photos) {
+      const id = await uploadPhotoDataUrl(p, tempUuid, csrfToken);
+      if (id) photoIds.push(id);
+    }
+    if (!photoIds.length) throw new Error("Nie udało się wgrać żadnego zdjęcia");
+
+    // 2) zbuduj partial state — używamy tylko pól istniejących w state, plus assignedPhotos
+    const colorIds = extractColorIds(original);
+    const statusId = pickStatusLabelId(state, original);
+    const partial = {
+      title: original.title || state.title || "",
+      description: original.description || state.description || "",
+      price: Number(price),
+      currency: currency || original.currency || state.currency,
+      catalogId: original.catalog_id || valueId(original.catalog) || state.catalogId,
+      brandId: original.brand_id || valueId(original.brand_dto) || valueId(original.brand) || state.brandId,
+      brandTitle: original.brand_title || valueTitle(original.brand_dto) || valueTitle(original.brand) || state.brandTitle,
+      sizeId: original.size_id || valueId(original.size) || state.sizeId,
+      colorIds: colorIds.length ? colorIds : state.colorIds,
+      packageSizeId: original.package_size_id || valueId(original.package_size) || state.packageSizeId,
+      statusId: statusId || state.statusId,
+      isUnisex: !!original.is_unisex,
+      isForSwap: !!original.is_for_swap,
+      assignedPhotos: photoIds.map((id) => ({ id, orientation: 0 })),
+    };
+    // usuń puste klucze, żeby nie nadpisać dobrej wartości undefinedem
+    Object.keys(partial).forEach((k) => {
+      if (partial[k] === undefined || partial[k] === null || partial[k] === "") delete partial[k];
+    });
+    await formBridge("write", { partial }, 5000);
+
+    // 3) wymuś też wartość pól tekstowych przez natywne settery (React + walidacja onBlur)
+    await formBridge("setInput", { selector: '[data-testid="price-input--input"]', value: String(partial.price) }, 3000).catch(() => {});
+
+    // 4) klik save
+    await new Promise((r) => setTimeout(r, 500));
+    await formBridge("clickSave", {}, 5000);
+    return { ok: true, expectedTitle: partial.title };
+  }
+
+  async function deleteItemById(id) {
+    await deleteOldItem(id);
+    return { ok: true };
+  }
+
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS", "FETCH_ITEMS_V2", "FETCH_ITEM_DETAIL", "FETCH_ITEM_DETAIL_V2", "RELIST_ITEM", "RELIST_ITEM_V2", "RUN_REPLIES", "RUN_REPLIES_V2", "SYNC_NOW", "SYNC_NOW_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS", "FETCH_ITEMS_V2", "FETCH_ITEM_DETAIL", "FETCH_ITEM_DETAIL_V2", "RELIST_ITEM", "RELIST_ITEM_V2", "RUN_REPLIES", "RUN_REPLIES_V2", "SYNC_NOW", "SYNC_NOW_V2", "FILL_AND_SUBMIT_V2", "DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
@@ -533,6 +628,10 @@
         else if (msg.kind === "FETCH_ITEM_DETAIL" || msg.kind === "FETCH_ITEM_DETAIL_V2") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") {
           sendResponse({ ok: true, ...(await relistItem(msg)) });
+        } else if (msg.kind === "FILL_AND_SUBMIT_V2") {
+          sendResponse({ ok: true, ...(await fillAndSubmit(msg)) });
+        } else if (msg.kind === "DELETE_ITEM_V2") {
+          sendResponse({ ok: true, ...(await deleteItemById(msg.id)) });
         } else if (msg.kind === "RUN_REPLIES" || msg.kind === "RUN_REPLIES_V2") { await runReplies(); sendResponse({ ok: true }); }
         else if (msg.kind === "SYNC_NOW" || msg.kind === "SYNC_NOW_V2") sendResponse({ ok: true, ...(await syncToPanel()) });
       } catch (e) {
