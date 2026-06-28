@@ -40,13 +40,13 @@
     return h;
   }
 
-  function pageFetch(path, init = {}) {
+  function bridgeRequest(kind, payload = {}, timeout = 30000) {
     const id = `${requestPrefix}-${++requestSeq}`;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         window.removeEventListener("message", onMessage);
         reject(new Error("Timeout połączenia z Vinted"));
-      }, 20000);
+      }, timeout);
 
       function onMessage(event) {
         if (event.source !== window) return;
@@ -61,15 +61,29 @@
       window.addEventListener("message", onMessage);
       window.postMessage({
         source: "VM_CONTENT",
-        kind: "FETCH",
         id,
-        path,
-        init: {
-          ...init,
-          headers: buildHeaders(init, !!init.body),
-        },
+        kind,
+        ...payload,
       }, origin);
     });
+  }
+
+  function pageFetch(path, init = {}) {
+    return bridgeRequest("FETCH", {
+      path,
+      init: {
+        ...init,
+        headers: buildHeaders(init, !!init.body),
+      },
+    });
+  }
+
+  function pageUploadPhoto(dataUrl, tempUuid) {
+    return bridgeRequest("UPLOAD_PHOTO", {
+      dataUrl,
+      tempUuid,
+      filename: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
+    }, 60000);
   }
 
   async function vintedApi(path, init = {}) {
@@ -80,6 +94,18 @@
 
   async function vintedRaw(path, init = {}) {
     return pageFetch(path, init);
+  }
+
+  async function getExtensionStatus() {
+    return chrome.runtime.sendMessage({ kind: "GET_STATUS" }).catch(() => null);
+  }
+
+  async function ensureExtensionSignedIn() {
+    const status = await getExtensionStatus();
+    if (!status?.signedIn) {
+      throw new Error("Zaloguj wtyczkę przez Google w popupie, aby używać funkcji Vinted Manager");
+    }
+    return status;
   }
 
   function findUserInObject(value, depth = 0) {
@@ -208,64 +234,116 @@
   }
 
   async function fetchItemDetail(id) {
-    const r = await vintedApi(`/api/v2/items/${id}`);
-    return r?.item || null;
+    const tries = [`/api/v2/items/${id}/details`, `/api/v2/items/${id}?localize=false`, `/api/v2/items/${id}`];
+    let lastErr;
+    for (const path of tries) {
+      try {
+        const r = await vintedApi(path);
+        return r?.item || r;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Nie mogę pobrać szczegółów przedmiotu");
   }
 
   // ===== Ponowne wystawianie =====
-  async function uploadPhotoDataUrl(dataUrl) {
-    const blob = await (await fetch(dataUrl)).blob();
-    const fd = new FormData();
-    fd.append("photo[type]", "item");
-    fd.append("photo[file]", blob, `photo-${Date.now()}.jpg`);
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
-    const res = await fetch(`https://${host}/api/v2/photos`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "X-CSRF-Token": csrf || "" },
-      body: fd,
+  async function getUploadContext() {
+    const res = await vintedRaw("/items/new", {
+      headers: { Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
     });
-    if (!res.ok) throw new Error(`upload ${res.status}`);
-    const j = await res.json();
-    return j?.photo?.id ?? j?.id;
+    const text = res?.text || "";
+    const tempUuid = text.match(/"tempUuid"\s*:\s*"([^"\\]+)"/i)?.[1]
+      || text.match(/"temp_uuid"\s*:\s*"([^"\\]+)"/i)?.[1]
+      || text.match(/tempUuid\s*[:=]\s*["']([^"']+)["']/i)?.[1]
+      || crypto.randomUUID?.();
+    if (!tempUuid) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak tempUuid)");
+    return { tempUuid };
+  }
+
+  async function uploadPhotoDataUrl(dataUrl, tempUuid) {
+    const res = await pageUploadPhoto(dataUrl, tempUuid);
+    if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
+    const j = res.json;
+    const id = j?.photo?.id ?? j?.id;
+    if (!id) throw new Error("Vinted nie zwrócił ID zdjęcia");
+    return id;
+  }
+
+  function compact(value) {
+    if (Array.isArray(value)) return value.filter((x) => x !== undefined && x !== null && x !== "");
+    return Object.fromEntries(
+      Object.entries(value).filter(([, v]) => v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && v.length === 0)),
+    );
+  }
+
+  function extractColorIds(original) {
+    if (Array.isArray(original.color_ids)) return original.color_ids;
+    return [original.color1_id, original.color2_id, original.color_id].filter(Boolean);
+  }
+
+  async function deleteOldItem(itemId) {
+    const attempts = [
+      { path: `/api/v2/items/${itemId}`, init: { method: "DELETE" } },
+      { path: `/api/v2/items/${itemId}/delete`, init: { method: "POST", body: JSON.stringify({}) } },
+    ];
+    let last = "";
+    for (const attempt of attempts) {
+      try {
+        const res = await vintedRaw(attempt.path, attempt.init);
+        if (res.ok) return true;
+        last = `${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`;
+      } catch (e) {
+        last = e?.message || String(e);
+      }
+    }
+    throw new Error(`nowe ogłoszenie dodane, ale nie udało się usunąć starego (${last})`);
   }
 
   async function relistItem({ original, price, photos }) {
+    await ensureExtensionSignedIn();
+    const { tempUuid } = await getUploadContext();
     const photoIds = [];
     for (const p of photos) {
-      const id = await uploadPhotoDataUrl(p);
+      const id = await uploadPhotoDataUrl(p, tempUuid);
       if (id) photoIds.push(id);
     }
-    const body = {
-      item: {
-        title: original.title,
-        description: original.description,
-        price: String(price),
-        currency: original.currency || original.price?.currency_code,
-        catalog_id: original.catalog_id,
-        brand_id: original.brand_id,
-        size_id: original.size_id,
-        status_id: original.status_id,
-        package_size_id: original.package_size_id,
-        color_ids: original.color_ids,
-        material_ids: original.material_ids,
-        is_unisex: original.is_unisex ? 1 : 0,
-        assigned_photos: photoIds.map((id) => ({ id })),
-      },
-      feedback_id: null,
-      push_up: false,
-    };
+    if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
+
+    const item = compact({
+      id: null,
+      temp_uuid: tempUuid,
+      title: original.title,
+      description: original.description || original.title || "",
+      price: String(price),
+      currency: original.currency || original.price?.currency_code || original.price?.currency,
+      catalog_id: original.catalog_id,
+      brand_id: original.brand_id,
+      brand: original.brand_title || original.brand,
+      size_id: original.size_id,
+      status_id: original.status_id,
+      package_size_id: original.package_size_id,
+      color_ids: extractColorIds(original),
+      material_id: original.material_id,
+      material_ids: original.material_ids,
+      item_attributes: original.item_attributes,
+      isbn: original.isbn,
+      is_unisex: !!original.is_unisex,
+      is_for_swap: !!original.is_for_swap,
+      is_for_sell: original.is_for_sell !== false,
+      shipment_prices: original.shipment_prices || { domestic: null, international: null },
+      assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
+    });
+
+    const body = { item, feedback_id: null, push_up: false };
     const created = await vintedApi(`/api/v2/items`, {
       method: "POST",
       body: JSON.stringify(body),
     });
-    const newId = created?.item?.id;
-    try {
-      await vintedRaw(`/api/v2/items/${original.id}`, { method: "DELETE" });
-    } catch (e) {
-      console.warn("[VM] delete old fail", e);
-    }
-    return newId;
+    const newId = created?.item?.id ?? created?.id;
+    if (!newId) throw new Error("Vinted przyjął dodawanie, ale nie zwrócił ID nowego ogłoszenia");
+    await deleteOldItem(original.id);
+    return { newId, deletedOld: true };
   }
 
   // ===== Auto-reply =====
@@ -333,6 +411,9 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
+        const requiresLogin = ["FETCH_ITEMS", "FETCH_ITEM_DETAIL", "RELIST_ITEM", "RUN_REPLIES", "SYNC_NOW"].includes(msg.kind);
+        if (requiresLogin) await ensureExtensionSignedIn();
+
         if (msg.kind === "FETCH_ITEMS") sendResponse({ ok: true, ...(await fetchMyItems()) });
         else if (msg.kind === "GET_ME") {
           const me = await getMe();
@@ -340,8 +421,7 @@
         }
         else if (msg.kind === "FETCH_ITEM_DETAIL") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
         else if (msg.kind === "RELIST_ITEM") {
-          const newId = await relistItem(msg);
-          sendResponse({ ok: true, newId });
+          sendResponse({ ok: true, ...(await relistItem(msg)) });
         } else if (msg.kind === "RUN_REPLIES") { await runReplies(); sendResponse({ ok: true }); }
         else if (msg.kind === "SYNC_NOW") sendResponse({ ok: true, ...(await syncToPanel()) });
       } catch (e) {
@@ -351,11 +431,15 @@
     return true;
   });
 
-  // Sync w tle (best-effort, błędy ciche)
-  syncToPanel().catch((e) => console.warn("[VM] sync err", e));
-  setInterval(() => syncToPanel().catch(() => {}), 10 * 60 * 1000);
-  runReplies();
-  setInterval(runReplies, 5 * 60 * 1000);
+  // Sync/auto-reply działa tylko po zalogowaniu wtyczki przez Google.
+  ensureExtensionSignedIn()
+    .then(() => {
+      syncToPanel().catch((e) => console.warn("[VM] sync err", e));
+      setInterval(() => syncToPanel().catch(() => {}), 10 * 60 * 1000);
+      runReplies();
+      setInterval(runReplies, 5 * 60 * 1000);
+    })
+    .catch(() => {});
 
   // ===================================================================
   // SIDEBAR DRAWER — pasek z prawej + rozsuwany panel (iframe panel.html)
@@ -368,25 +452,21 @@
       <style>
         #vm-sidebar-root { position: fixed; top:0; right:0; height:100vh; z-index: 2147483646; font-family:-apple-system,system-ui,sans-serif; }
         #vm-handle {
-          position:absolute; top:50%; right:0; transform:translateY(-50%);
+          position:fixed; top:50%; right:0; transform:translateY(-50%);
           width:32px; height:84px; background:#5eead4; color:#0b1220;
           border-radius:8px 0 0 8px; display:flex; align-items:center; justify-content:center;
           cursor:pointer; box-shadow:-2px 2px 8px rgba(0,0,0,.25); font-size:18px; font-weight:700;
-          transition:right .25s ease;
+          transition:right .25s ease, top .25s ease, height .25s ease;
         }
         #vm-handle:hover { background:#7af0db; }
         #vm-drawer {
-          position:absolute; top:0; right:-560px; width:560px; max-width:95vw; height:100vh;
+          position:fixed; inset:0; width:100vw; height:100vh;
           background:#0f1420; box-shadow:-4px 0 16px rgba(0,0,0,.5);
-          transition:right .25s ease; display:flex; flex-direction:column;
+          transform:translateX(100%); transition:transform .25s ease; display:flex; flex-direction:column;
         }
-        #vm-sidebar-root.open #vm-drawer { right:0; }
-        #vm-sidebar-root.open #vm-handle { right:560px; }
+        #vm-sidebar-root.open #vm-drawer { transform:translateX(0); }
+        #vm-sidebar-root.open #vm-handle { right:12px; top:18px; height:44px; transform:none; border-radius:8px; z-index:2147483647; }
         #vm-drawer iframe { flex:1; width:100%; border:0; background:#0f1420; }
-        @media (max-width: 640px) {
-          #vm-drawer { width:95vw; right:-95vw; }
-          #vm-sidebar-root.open #vm-handle { right:95vw; }
-        }
       </style>
       <div id="vm-handle" title="Vinted Manager">
         <span id="vm-arrow">‹</span>

@@ -1,4 +1,4 @@
-// Background service worker — odświeżanie sesji + lokalna pętla auto-bump.
+// Background service worker — sesja panelu + komunikacja z backendem.
 const DEFAULT_PANEL_URL = "https://resale-automator-bot.lovable.app";
 
 async function getConfig() {
@@ -17,7 +17,7 @@ async function getConfig() {
     supabaseUrl,
     supabaseAnonKey,
     user,
-    settings: settings || { bumpEnabled: false, bumpIntervalHours: 8, replies: [] },
+    settings: settings || { replies: [] },
   };
 }
 

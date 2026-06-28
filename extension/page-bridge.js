@@ -28,20 +28,56 @@
     };
   }
 
+  async function dataUrlToBlob(dataUrl) {
+    const response = await fetch(dataUrl);
+    return response.blob();
+  }
+
   window.addEventListener("message", async (event) => {
     if (event.source !== window) return;
     const msg = event.data;
-    if (!msg || msg.source !== "VM_CONTENT" || msg.kind !== "FETCH" || !msg.id) return;
+    if (!msg || msg.source !== "VM_CONTENT" || !msg.kind || !msg.id) return;
 
     try {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+      const anon = getCookie("anon_id") || getCookie("anonymous-locale");
+      const accessToken = getCookie("access_token_web");
+
+      if (msg.kind === "UPLOAD_PHOTO") {
+        const form = new FormData();
+        const blob = await dataUrlToBlob(msg.dataUrl);
+        form.append("photo[type]", "item");
+        if (msg.tempUuid) form.append("photo[temp_uuid]", msg.tempUuid);
+        form.append("photo[file]", blob, msg.filename || `photo-${Date.now()}.jpg`);
+
+        const headers = new Headers();
+        if (csrf) headers.set("X-CSRF-Token", csrf);
+        if (anon) headers.set("X-Anon-Id", decodeURIComponent(anon));
+        if (accessToken) headers.set("Authorization", `Bearer ${decodeURIComponent(accessToken)}`);
+        headers.set("X-Requested-With", "XMLHttpRequest");
+
+        const response = await fetch(new URL("/api/v2/photos", window.location.origin).toString(), {
+          method: "POST",
+          headers,
+          credentials: "include",
+          mode: "same-origin",
+          body: form,
+        });
+
+        window.postMessage(
+          { source: "VM_PAGE_BRIDGE", id: msg.id, ok: true, response: await toPayload(response) },
+          window.location.origin,
+        );
+        return;
+      }
+
+      if (msg.kind !== "FETCH") return;
+
       const url = new URL(msg.path, window.location.origin);
       if (url.origin !== window.location.origin) throw new Error("Zablokowano obcy origin");
 
       const init = msg.init || {};
       const headers = new Headers(init.headers || {});
-      const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
-      const anon = getCookie("anon_id") || getCookie("anonymous-locale");
-      const accessToken = getCookie("access_token_web");
       if (csrf && !headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", csrf);
       if (anon && !headers.has("X-Anon-Id")) headers.set("X-Anon-Id", decodeURIComponent(anon));
       if (accessToken && !headers.has("Authorization")) {
