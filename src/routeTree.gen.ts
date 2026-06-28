@@ -13,16 +13,9 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedExtensionConnectRouteImport } from './routes/_authenticated/extension-connect'
-import { Route as AuthenticatedDownloadExtensionRouteImport } from './routes/_authenticated/download-extension'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as ApiPublicExtensionTasksRouteImport } from './routes/api/public/extension/tasks'
 import { Route as ApiPublicExtensionSyncItemsRouteImport } from './routes/api/public/extension/sync-items'
-import { Route as ApiPublicExtensionPairRouteImport } from './routes/api/public/extension/pair'
-import { Route as ApiPublicExtensionMatchReplyRouteImport } from './routes/api/public/extension/match-reply'
-import { Route as AuthenticatedAccountsAccountIdLogsRouteImport } from './routes/_authenticated/accounts.$accountId.logs'
 import { Route as AuthenticatedAccountsAccountIdItemsRouteImport } from './routes/_authenticated/accounts.$accountId.items'
-import { Route as AuthenticatedAccountsAccountIdAutoReplyRouteImport } from './routes/_authenticated/accounts.$accountId.auto-reply'
-import { Route as AuthenticatedAccountsAccountIdAutoBumpRouteImport } from './routes/_authenticated/accounts.$accountId.auto-bump'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -44,21 +37,10 @@ const AuthenticatedExtensionConnectRoute =
     path: '/extension-connect',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedDownloadExtensionRoute =
-  AuthenticatedDownloadExtensionRouteImport.update({
-    id: '/download-extension',
-    path: '/download-extension',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const ApiPublicExtensionTasksRoute = ApiPublicExtensionTasksRouteImport.update({
-  id: '/api/public/extension/tasks',
-  path: '/api/public/extension/tasks',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicExtensionSyncItemsRoute =
   ApiPublicExtensionSyncItemsRouteImport.update({
@@ -66,39 +48,10 @@ const ApiPublicExtensionSyncItemsRoute =
     path: '/api/public/extension/sync-items',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicExtensionPairRoute = ApiPublicExtensionPairRouteImport.update({
-  id: '/api/public/extension/pair',
-  path: '/api/public/extension/pair',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicExtensionMatchReplyRoute =
-  ApiPublicExtensionMatchReplyRouteImport.update({
-    id: '/api/public/extension/match-reply',
-    path: '/api/public/extension/match-reply',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const AuthenticatedAccountsAccountIdLogsRoute =
-  AuthenticatedAccountsAccountIdLogsRouteImport.update({
-    id: '/accounts/$accountId/logs',
-    path: '/accounts/$accountId/logs',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedAccountsAccountIdItemsRoute =
   AuthenticatedAccountsAccountIdItemsRouteImport.update({
     id: '/accounts/$accountId/items',
     path: '/accounts/$accountId/items',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAccountsAccountIdAutoReplyRoute =
-  AuthenticatedAccountsAccountIdAutoReplyRouteImport.update({
-    id: '/accounts/$accountId/auto-reply',
-    path: '/accounts/$accountId/auto-reply',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAccountsAccountIdAutoBumpRoute =
-  AuthenticatedAccountsAccountIdAutoBumpRouteImport.update({
-    id: '/accounts/$accountId/auto-bump',
-    path: '/accounts/$accountId/auto-bump',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
@@ -106,31 +59,17 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/download-extension': typeof AuthenticatedDownloadExtensionRoute
   '/extension-connect': typeof AuthenticatedExtensionConnectRoute
-  '/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
-  '/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
-  '/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
-  '/api/public/extension/match-reply': typeof ApiPublicExtensionMatchReplyRoute
-  '/api/public/extension/pair': typeof ApiPublicExtensionPairRoute
   '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
-  '/api/public/extension/tasks': typeof ApiPublicExtensionTasksRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/download-extension': typeof AuthenticatedDownloadExtensionRoute
   '/extension-connect': typeof AuthenticatedExtensionConnectRoute
-  '/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
-  '/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
-  '/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
-  '/api/public/extension/match-reply': typeof ApiPublicExtensionMatchReplyRoute
-  '/api/public/extension/pair': typeof ApiPublicExtensionPairRoute
   '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
-  '/api/public/extension/tasks': typeof ApiPublicExtensionTasksRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -138,16 +77,9 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/download-extension': typeof AuthenticatedDownloadExtensionRoute
   '/_authenticated/extension-connect': typeof AuthenticatedExtensionConnectRoute
-  '/_authenticated/accounts/$accountId/auto-bump': typeof AuthenticatedAccountsAccountIdAutoBumpRoute
-  '/_authenticated/accounts/$accountId/auto-reply': typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   '/_authenticated/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
-  '/_authenticated/accounts/$accountId/logs': typeof AuthenticatedAccountsAccountIdLogsRoute
-  '/api/public/extension/match-reply': typeof ApiPublicExtensionMatchReplyRoute
-  '/api/public/extension/pair': typeof ApiPublicExtensionPairRoute
   '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
-  '/api/public/extension/tasks': typeof ApiPublicExtensionTasksRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -155,57 +87,33 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dashboard'
-    | '/download-extension'
     | '/extension-connect'
-    | '/accounts/$accountId/auto-bump'
-    | '/accounts/$accountId/auto-reply'
     | '/accounts/$accountId/items'
-    | '/accounts/$accountId/logs'
-    | '/api/public/extension/match-reply'
-    | '/api/public/extension/pair'
     | '/api/public/extension/sync-items'
-    | '/api/public/extension/tasks'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/dashboard'
-    | '/download-extension'
     | '/extension-connect'
-    | '/accounts/$accountId/auto-bump'
-    | '/accounts/$accountId/auto-reply'
     | '/accounts/$accountId/items'
-    | '/accounts/$accountId/logs'
-    | '/api/public/extension/match-reply'
-    | '/api/public/extension/pair'
     | '/api/public/extension/sync-items'
-    | '/api/public/extension/tasks'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/dashboard'
-    | '/_authenticated/download-extension'
     | '/_authenticated/extension-connect'
-    | '/_authenticated/accounts/$accountId/auto-bump'
-    | '/_authenticated/accounts/$accountId/auto-reply'
     | '/_authenticated/accounts/$accountId/items'
-    | '/_authenticated/accounts/$accountId/logs'
-    | '/api/public/extension/match-reply'
-    | '/api/public/extension/pair'
     | '/api/public/extension/sync-items'
-    | '/api/public/extension/tasks'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
-  ApiPublicExtensionMatchReplyRoute: typeof ApiPublicExtensionMatchReplyRoute
-  ApiPublicExtensionPairRoute: typeof ApiPublicExtensionPairRoute
   ApiPublicExtensionSyncItemsRoute: typeof ApiPublicExtensionSyncItemsRoute
-  ApiPublicExtensionTasksRoute: typeof ApiPublicExtensionTasksRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -238,26 +146,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedExtensionConnectRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/download-extension': {
-      id: '/_authenticated/download-extension'
-      path: '/download-extension'
-      fullPath: '/download-extension'
-      preLoaderRoute: typeof AuthenticatedDownloadExtensionRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/api/public/extension/tasks': {
-      id: '/api/public/extension/tasks'
-      path: '/api/public/extension/tasks'
-      fullPath: '/api/public/extension/tasks'
-      preLoaderRoute: typeof ApiPublicExtensionTasksRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/api/public/extension/sync-items': {
       id: '/api/public/extension/sync-items'
@@ -266,27 +160,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicExtensionSyncItemsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/extension/pair': {
-      id: '/api/public/extension/pair'
-      path: '/api/public/extension/pair'
-      fullPath: '/api/public/extension/pair'
-      preLoaderRoute: typeof ApiPublicExtensionPairRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/extension/match-reply': {
-      id: '/api/public/extension/match-reply'
-      path: '/api/public/extension/match-reply'
-      fullPath: '/api/public/extension/match-reply'
-      preLoaderRoute: typeof ApiPublicExtensionMatchReplyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/accounts/$accountId/logs': {
-      id: '/_authenticated/accounts/$accountId/logs'
-      path: '/accounts/$accountId/logs'
-      fullPath: '/accounts/$accountId/logs'
-      preLoaderRoute: typeof AuthenticatedAccountsAccountIdLogsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/accounts/$accountId/items': {
       id: '/_authenticated/accounts/$accountId/items'
       path: '/accounts/$accountId/items'
@@ -294,45 +167,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAccountsAccountIdItemsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/accounts/$accountId/auto-reply': {
-      id: '/_authenticated/accounts/$accountId/auto-reply'
-      path: '/accounts/$accountId/auto-reply'
-      fullPath: '/accounts/$accountId/auto-reply'
-      preLoaderRoute: typeof AuthenticatedAccountsAccountIdAutoReplyRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/accounts/$accountId/auto-bump': {
-      id: '/_authenticated/accounts/$accountId/auto-bump'
-      path: '/accounts/$accountId/auto-bump'
-      fullPath: '/accounts/$accountId/auto-bump'
-      preLoaderRoute: typeof AuthenticatedAccountsAccountIdAutoBumpRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedDownloadExtensionRoute: typeof AuthenticatedDownloadExtensionRoute
   AuthenticatedExtensionConnectRoute: typeof AuthenticatedExtensionConnectRoute
-  AuthenticatedAccountsAccountIdAutoBumpRoute: typeof AuthenticatedAccountsAccountIdAutoBumpRoute
-  AuthenticatedAccountsAccountIdAutoReplyRoute: typeof AuthenticatedAccountsAccountIdAutoReplyRoute
   AuthenticatedAccountsAccountIdItemsRoute: typeof AuthenticatedAccountsAccountIdItemsRoute
-  AuthenticatedAccountsAccountIdLogsRoute: typeof AuthenticatedAccountsAccountIdLogsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedDownloadExtensionRoute: AuthenticatedDownloadExtensionRoute,
   AuthenticatedExtensionConnectRoute: AuthenticatedExtensionConnectRoute,
-  AuthenticatedAccountsAccountIdAutoBumpRoute:
-    AuthenticatedAccountsAccountIdAutoBumpRoute,
-  AuthenticatedAccountsAccountIdAutoReplyRoute:
-    AuthenticatedAccountsAccountIdAutoReplyRoute,
   AuthenticatedAccountsAccountIdItemsRoute:
     AuthenticatedAccountsAccountIdItemsRoute,
-  AuthenticatedAccountsAccountIdLogsRoute:
-    AuthenticatedAccountsAccountIdLogsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -342,10 +190,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
-  ApiPublicExtensionMatchReplyRoute: ApiPublicExtensionMatchReplyRoute,
-  ApiPublicExtensionPairRoute: ApiPublicExtensionPairRoute,
   ApiPublicExtensionSyncItemsRoute: ApiPublicExtensionSyncItemsRoute,
-  ApiPublicExtensionTasksRoute: ApiPublicExtensionTasksRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

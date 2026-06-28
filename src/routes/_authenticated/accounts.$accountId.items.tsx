@@ -4,9 +4,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { getAccount, listItems } from "@/lib/vinted.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileDown, FileSpreadsheet, Search } from "lucide-react";
+import { FileCode2, FileDown, FileSpreadsheet, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { exportToCSV, exportToExcel } from "@/lib/export";
+import { exportToCSV, exportToExcel, exportToXML } from "@/lib/export";
 import { AccountHeader } from "@/components/account-header";
 
 export const Route = createFileRoute("/_authenticated/accounts/$accountId/items")({
@@ -35,10 +35,11 @@ function ItemsPage() {
   }, [itemsQ.data, q]);
 
   const account = accountQ.data;
+  const base = account?.label ?? "items";
 
   return (
     <div className="space-y-6">
-      <AccountHeader account={account} active="items" />
+      <AccountHeader account={account} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative max-w-sm flex-1">
@@ -50,18 +51,14 @@ function ItemsPage() {
             className="pl-9"
           />
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => exportToCSV(filtered, `vinted-${account?.label ?? "items"}.csv`)}
-            disabled={!filtered.length}
-          >
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => exportToCSV(filtered, `vinted-${base}.csv`)} disabled={!filtered.length}>
             <FileDown className="mr-2 h-4 w-4" /> CSV
           </Button>
-          <Button
-            onClick={() => exportToExcel(filtered, `vinted-${account?.label ?? "items"}.xlsx`)}
-            disabled={!filtered.length}
-          >
+          <Button variant="outline" onClick={() => exportToXML(filtered, `vinted-${base}.xml`)} disabled={!filtered.length}>
+            <FileCode2 className="mr-2 h-4 w-4" /> XML
+          </Button>
+          <Button onClick={() => exportToExcel(filtered, `vinted-${base}.xlsx`)} disabled={!filtered.length}>
             <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel
           </Button>
         </div>
@@ -97,24 +94,14 @@ function ItemsPage() {
                   <tr key={it.id} className="hover:bg-surface-2">
                     <td className="px-4 py-2">
                       {it.photo_url ? (
-                        <img
-                          src={it.photo_url}
-                          alt=""
-                          className="h-12 w-12 rounded object-cover"
-                          loading="lazy"
-                        />
+                        <img src={it.photo_url} alt="" className="h-12 w-12 rounded object-cover" loading="lazy" />
                       ) : (
                         <div className="h-12 w-12 rounded bg-muted" />
                       )}
                     </td>
                     <td className="px-4 py-2">
                       {it.url ? (
-                        <a
-                          href={it.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-medium hover:text-primary"
-                        >
+                        <a href={it.url} target="_blank" rel="noreferrer" className="font-medium hover:text-primary">
                           {it.title}
                         </a>
                       ) : (
