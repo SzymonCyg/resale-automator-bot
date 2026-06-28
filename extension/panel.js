@@ -22,6 +22,12 @@ function bg(kind, payload) {
 }
 
 async function getVintedTab() {
+  // W trybie embedded (iframe na vinted.*) — preferuj aktywną kartę.
+  const isEmbedded = window.location.search.includes("embedded=1");
+  if (isEmbedded) {
+    const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (active && /vinted\./.test(active.url || "")) return active;
+  }
   const tabs = await chrome.tabs.query({
     url: ["*://*.vinted.pl/*","*://*.vinted.fr/*","*://*.vinted.de/*","*://*.vinted.es/*","*://*.vinted.it/*","*://*.vinted.nl/*","*://*.vinted.cz/*","*://*.vinted.sk/*","*://*.vinted.co.uk/*"],
   });
@@ -101,6 +107,18 @@ function escapeHtml(s) {
 }
 
 $("#refreshItems").addEventListener("click", loadItems);
+$("#syncItems").addEventListener("click", async () => {
+  $("#itemsStatus").textContent = "Synchronizuję...";
+  const tab = await getVintedTab();
+  if (!tab) { $("#itemsStatus").textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
+  try {
+    const r = await tabMsg(tab.id, { kind: "SYNC_NOW" });
+    if (!r?.ok) throw new Error(r?.error || "fail");
+    $("#itemsStatus").textContent = `✓ Zsynchronizowano ${r.count} przedmiotów (${r.username})`;
+  } catch (e) {
+    $("#itemsStatus").textContent = "Błąd synchr.: " + e.message;
+  }
+});
 $("#selAll").addEventListener("change", (e) => {
   const checked = e.target.checked;
   items.forEach((it) => (checked ? selected.add(String(it.id)) : selected.delete(String(it.id))));
@@ -340,8 +358,6 @@ let rules = [];
 async function loadSettings() {
   const { settings } = await chrome.storage.local.get(["settings"]);
   const s = settings || {};
-  $("#bumpEnabled").checked = !!s.bumpEnabled;
-  $("#bumpInterval").value = s.bumpIntervalHours || 8;
   rules = Array.isArray(s.replies) ? [...s.replies] : [];
   renderRules();
 }
@@ -390,8 +406,6 @@ $("#addRule").addEventListener("click", () => {
 });
 $("#saveSettings").addEventListener("click", async () => {
   const settings = {
-    bumpEnabled: $("#bumpEnabled").checked,
-    bumpIntervalHours: Math.max(3, Math.min(168, Number($("#bumpInterval").value) || 8)),
     replies: rules.filter((r) => r.pattern && r.response),
   };
   await bg("SAVE_SETTINGS", { settings });
