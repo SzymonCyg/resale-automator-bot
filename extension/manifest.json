@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Vinted Manager Helper",
-  "version": "0.3.0",
-  "description": "Synchronizuje konta Vinted z panelem oraz lokalnie obsługuje auto-bump i auto-odpowiedzi.",
+  "version": "0.4.0",
+  "description": "Panel do zarządzania kontami Vinted: podgląd przedmiotów, ponowne wystawianie z edycją zdjęć i cen, auto-bump, auto-odpowiedzi.",
   "permissions": ["storage", "alarms", "activeTab", "tabs", "scripting"],
   "host_permissions": [
     "https://*.vinted.pl/*",
