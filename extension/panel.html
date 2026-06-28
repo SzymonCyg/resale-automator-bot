@@ -88,18 +88,13 @@
             <label><input type="radio" name="photoMode" value="none" /> Bez zmian</label>
           </fieldset>
           <fieldset>
-            <legend>Cena — zmiana grupowa</legend>
+            <legend>Cena — masowa zmiana procentowa</legend>
             <div class="row">
-              <select id="bulkPriceOp">
-                <option value="none">Bez zmian</option>
-                <option value="set">Ustaw na</option>
-                <option value="add">Dodaj</option>
-                <option value="sub">Odejmij</option>
-                <option value="pct">Procent (±%)</option>
-              </select>
-              <input type="number" step="0.01" id="bulkPriceVal" placeholder="0.00" />
+              <input type="number" step="0.1" id="bulkPricePct" placeholder="np. -10 lub 15" />
+              <span class="muted">%</span>
               <button id="applyBulkPrice" class="btn">Zastosuj do wszystkich</button>
             </div>
+            <p class="muted" style="margin:6px 0 0">Cenę pojedynczego przedmiotu możesz też edytować ręcznie na liście poniżej.</p>
           </fieldset>
         </div>
 
