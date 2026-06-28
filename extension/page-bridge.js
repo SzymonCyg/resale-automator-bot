@@ -29,8 +29,12 @@
   }
 
   async function dataUrlToBlob(dataUrl) {
-    const response = await fetch(dataUrl);
-    return response.blob();
+    const [meta, raw] = String(dataUrl).split(",");
+    const mime = meta.match(/^data:([^;]+)/)?.[1] || "image/jpeg";
+    const binary = meta.includes(";base64") ? atob(raw) : decodeURIComponent(raw);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
   }
 
   window.addEventListener("message", async (event) => {
