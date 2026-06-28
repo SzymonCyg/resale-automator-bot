@@ -26,6 +26,7 @@
       <div class="toolbar">
         <div class="left">
           <button id="refreshItems" class="btn">↻ Odśwież</button>
+          <button id="syncItems" class="btn">☁ Synchronizuj do panelu</button>
           <span id="itemsStatus" class="muted"></span>
         </div>
         <div class="right">
@@ -62,17 +63,6 @@
 
     <!-- SETTINGS -->
     <section class="view hidden" data-view="settings">
-      <div class="card">
-        <h2>Auto-bump</h2>
-        <label class="row">
-          <input type="checkbox" id="bumpEnabled" />
-          <span>Włącz automatyczne ponowne wystawianie</span>
-        </label>
-        <label class="row">
-          <span>Interwał (godziny)</span>
-          <input type="number" id="bumpInterval" min="3" max="168" value="8" />
-        </label>
-      </div>
       <div class="card">
         <h2>Auto-odpowiedzi</h2>
         <div id="rules"></div>
