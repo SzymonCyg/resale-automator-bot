@@ -15,6 +15,7 @@
     script.id = "vm-page-bridge";
     script.src = chrome.runtime.getURL("page-bridge.js");
     script.async = false;
+    script.onerror = () => console.warn("[Vinted Manager] page-bridge został zablokowany przez CSP; panel wstrzyknie go przez chrome.scripting.");
     (document.head || document.documentElement).appendChild(script);
   }
 
@@ -28,15 +29,17 @@
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const anon = getCookie("anon_id") || getCookie("anonymous-locale") || "";
     const accessToken = getCookie("access_token_web");
+    const skipXRequestedWith = init.skipXRequestedWith;
     const h = {
       Accept: "application/json, text/plain, */*",
       "X-CSRF-Token": csrf || "",
-      "X-Requested-With": "XMLHttpRequest",
       ...(anon ? { "X-Anon-Id": decodeURIComponent(anon) } : {}),
       ...(accessToken ? { Authorization: `Bearer ${decodeURIComponent(accessToken)}` } : {}),
       ...(init.headers || {}),
     };
+    if (!skipXRequestedWith) h["X-Requested-With"] = h["X-Requested-With"] || "XMLHttpRequest";
     if (hasBody && !h["Content-Type"]) h["Content-Type"] = "application/json";
+    delete h.skipXRequestedWith;
     return h;
   }
 
@@ -69,10 +72,12 @@
   }
 
   function pageFetch(path, init = {}) {
+    const { skipXRequestedWith, ...fetchInit } = init;
     return bridgeRequest("FETCH", {
       path,
       init: {
-        ...init,
+        ...fetchInit,
+        skipXRequestedWith,
         headers: buildHeaders(init, !!init.body),
       },
     });
@@ -250,6 +255,7 @@
   // ===== Ponowne wystawianie =====
   async function getUploadContext() {
     const res = await vintedRaw("/items/new", {
+      skipXRequestedWith: true,
       headers: { Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
     });
     const text = res?.text || "";
@@ -345,11 +351,10 @@
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
     const item = cleanPayload({
-      id: null,
       temp_uuid: tempUuid,
       title: original.title,
       description: original.description || original.title || "",
-      price: String(price),
+      price: Number(price),
       currency: currency || original.currency || original.price?.currency_code || original.price?.currency,
       catalog_id: original.catalog_id || valueId(original.catalog),
       brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand),
@@ -367,7 +372,7 @@
       is_unisex: !!original.is_unisex,
       is_for_swap: !!original.is_for_swap,
       is_for_sell: original.is_for_sell !== false,
-      shipment_prices: original.shipment_prices || { domestic: null, international: null },
+      ...(original.shipment_prices ? { shipment_prices: original.shipment_prices } : {}),
       assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
     });
 
