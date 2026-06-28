@@ -214,6 +214,10 @@
     (async () => {
       try {
         if (msg.kind === "FETCH_ITEMS") sendResponse({ ok: true, ...(await fetchMyItems()) });
+        else if (msg.kind === "GET_ME") {
+          const me = await getMe();
+          sendResponse({ ok: true, username: me?.login, userId: me?.id, photo: me?.photo?.url });
+        }
         else if (msg.kind === "FETCH_ITEM_DETAIL") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
         else if (msg.kind === "RELIST_ITEM") {
           const newId = await relistItem(msg);
