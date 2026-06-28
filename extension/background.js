@@ -72,42 +72,16 @@ async function postSyncItems(payload) {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create("vintedTick", { periodInMinutes: 30 });
   chrome.alarms.create("vintedRefresh", { periodInMinutes: 30 });
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   try {
     if (alarm.name === "vintedRefresh") await refreshSession();
-    if (alarm.name === "vintedTick") await runBumpIfDue();
   } catch (e) {
     console.warn("[Vinted Manager] alarm:", e);
   }
 });
-
-async function runBumpIfDue() {
-  const { settings } = await getConfig();
-  if (!settings?.bumpEnabled) return;
-  const { lastBumpAt } = await chrome.storage.local.get(["lastBumpAt"]);
-  const intervalMs = (settings.bumpIntervalHours || 8) * 3600 * 1000;
-  if (lastBumpAt && Date.now() - lastBumpAt < intervalMs) return;
-
-  const tabs = await chrome.tabs.query({
-    url: [
-      "*://*.vinted.pl/*", "*://*.vinted.fr/*", "*://*.vinted.de/*",
-      "*://*.vinted.es/*", "*://*.vinted.it/*", "*://*.vinted.nl/*",
-      "*://*.vinted.cz/*", "*://*.vinted.sk/*", "*://*.vinted.co.uk/*",
-    ],
-  });
-  const tab = tabs[0];
-  if (!tab?.id) return;
-  try {
-    await chrome.tabs.sendMessage(tab.id, { kind: "RUN_BUMP" });
-    await chrome.storage.local.set({ lastBumpAt: Date.now() });
-  } catch (e) {
-    console.warn("[Vinted Manager] bump send failed:", e);
-  }
-}
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.kind === "SYNC_ITEMS") {
