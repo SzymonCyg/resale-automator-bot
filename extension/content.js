@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.7.5";
+  const CONTENT_VERSION = "0.7.6";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -326,14 +326,14 @@
   }
 
   // Buduje draft — jak ab()/yu() w Dotb, z syncConditionAttr + syncSizeAttr
-  function buildDraft({ original, price, currency, photoIds }) {
+  function buildDraft({ original, price, currency, photoIds, tempUuid }) {
     const statusId = resolveStatusId(original);
     if (!statusId) throw new Error("Brak stanu przedmiotu (status_id)");
     const finalCurrency = currency || original.currency || original.price?.currency_code || "PLN";
     const draft = {
       id: null,
       currency: finalCurrency,
-      temp_uuid: newUuid(),
+      temp_uuid: tempUuid || newUuid(),
       title: original.title || "",
       description: original.description || original.title || "",
       brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand) || null,
@@ -370,6 +370,7 @@
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
     const csrfToken = readCsrfToken();
+    const draftUuid = newUuid(); // jeden UUID dla całego flow (upload_session_id)
 
     // 1) Upload zdjęć — każde dostaje własne UUID
     const photoIds = [];
@@ -379,12 +380,12 @@
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć");
 
-    // 2) Stworzenie draftu
-    const draft = buildDraft({ original, price, currency, photoIds });
+    // 2) Stworzenie draftu — z draftUuid
+    const draft = buildDraft({ original, price, currency, photoIds, tempUuid: draftUuid });
     const draftRes = await vintedApi(`/api/v2/item_upload/drafts`, {
       method: "POST",
       csrfToken,
-      body: JSON.stringify({ draft, feedback_id: null, parcel: null, upload_session_id: draft.temp_uuid }),
+      body: JSON.stringify({ draft, feedback_id: null, parcel: null, upload_session_id: draftUuid }),
     });
     const createdDraft = draftRes?.draft || draftRes;
     const draftId = createdDraft?.id;
@@ -400,13 +401,13 @@
       refreshedDraft = createdDraft;
     }
 
-    // 4) Publikacja — POST /completion z odświeżonym draftem (jak nde/v9() w Dotb)
-    const publishDraft = buildDraft({ original: { ...original, ...refreshedDraft }, price, currency, photoIds });
+    // 4) Publikacja — TEN SAM draftUuid!
+    const publishDraft = buildDraft({ original: { ...original, ...refreshedDraft }, price, currency, photoIds, tempUuid: draftUuid });
     publishDraft.id = draftId;
     const completedRes = await vintedApi(`/api/v2/item_upload/drafts/${draftId}/completion`, {
       method: "POST",
       csrfToken,
-      body: JSON.stringify({ draft: publishDraft, feedback_id: null, parcel: null, push_up: false, upload_session_id: publishDraft.temp_uuid }),
+      body: JSON.stringify({ draft: publishDraft, feedback_id: null, parcel: null, push_up: false, upload_session_id: draftUuid }),
     });
     const newId = completedRes?.item?.id ?? completedRes?.id;
     if (!newId) throw new Error("Vinted przyjął draft, ale nie zwrócił ID opublikowanego ogłoszenia");
