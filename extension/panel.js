@@ -63,13 +63,21 @@ function tabMsg(tabId, msg) {
   );
 }
 
+async function ensureVintedScripts(tabId) {
+  // Vinted blokuje <script src="chrome-extension://..."> przez CSP, dlatego bridge
+  // musi być wstrzyknięty oficjalnym API Chrome do MAIN world.
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["page-bridge.js"], world: "MAIN" });
+}
+
 async function vintedMsg(tabId, msg) {
+  await ensureVintedScripts(tabId);
   try {
     return await tabMsg(tabId, msg);
   } catch (error) {
     const message = error?.message || String(error);
     if (!/Receiving end does not exist|Could not establish connection/i.test(message)) throw error;
     await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    await ensureVintedScripts(tabId);
     await new Promise((resolve) => setTimeout(resolve, 400));
     return tabMsg(tabId, msg);
   }

@@ -15,6 +15,7 @@
     script.id = "vm-page-bridge";
     script.src = chrome.runtime.getURL("page-bridge.js");
     script.async = false;
+    script.onerror = () => console.warn("[Vinted Manager] page-bridge został zablokowany przez CSP; panel wstrzyknie go przez chrome.scripting.");
     (document.head || document.documentElement).appendChild(script);
   }
 
@@ -28,15 +29,17 @@
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const anon = getCookie("anon_id") || getCookie("anonymous-locale") || "";
     const accessToken = getCookie("access_token_web");
+    const skipXRequestedWith = init.skipXRequestedWith;
     const h = {
       Accept: "application/json, text/plain, */*",
       "X-CSRF-Token": csrf || "",
-      "X-Requested-With": "XMLHttpRequest",
       ...(anon ? { "X-Anon-Id": decodeURIComponent(anon) } : {}),
       ...(accessToken ? { Authorization: `Bearer ${decodeURIComponent(accessToken)}` } : {}),
       ...(init.headers || {}),
     };
+    if (!skipXRequestedWith) h["X-Requested-With"] = h["X-Requested-With"] || "XMLHttpRequest";
     if (hasBody && !h["Content-Type"]) h["Content-Type"] = "application/json";
+    delete h.skipXRequestedWith;
     return h;
   }
 
@@ -69,10 +72,12 @@
   }
 
   function pageFetch(path, init = {}) {
+    const { skipXRequestedWith, ...fetchInit } = init;
     return bridgeRequest("FETCH", {
       path,
       init: {
-        ...init,
+        ...fetchInit,
+        skipXRequestedWith,
         headers: buildHeaders(init, !!init.body),
       },
     });
@@ -250,15 +255,21 @@
   // ===== Ponowne wystawianie =====
   async function getUploadContext() {
     const res = await vintedRaw("/items/new", {
+      skipXRequestedWith: true,
       headers: { Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
     });
     const text = res?.text || "";
+    if (!res?.ok) throw new Error(`Nie mogę otworzyć formularza dodawania (${res?.status || "brak statusu"})`);
+    const uploadSessionId = text.match(/\\"uploadSessionId\\"\s*:\s*\\"([^\\]+)\\"/i)?.[1]
+      || text.match(/"uploadSessionId"\s*:\s*"([^"]+)"/i)?.[1]
+      || text.match(/uploadSessionId["\\:]+([^"\\]+)["\\]?/i)?.[1];
     const tempUuid = text.match(/"tempUuid"\s*:\s*"([^"\\]+)"/i)?.[1]
       || text.match(/"temp_uuid"\s*:\s*"([^"\\]+)"/i)?.[1]
       || text.match(/tempUuid\s*[:=]\s*["']([^"']+)["']/i)?.[1]
       || crypto.randomUUID?.();
+    if (!uploadSessionId) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak uploadSessionId)");
     if (!tempUuid) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak tempUuid)");
-    return { tempUuid };
+    return { uploadSessionId, tempUuid };
   }
 
   async function uploadPhotoDataUrl(dataUrl, tempUuid) {
@@ -290,6 +301,27 @@
     return [valueId(original.color1), valueId(original.color2), original.color1_id, original.color2_id, original.color_id].filter(Boolean);
   }
 
+  function extractConditionIds(original) {
+    const fromAttrs = Array.isArray(original.item_attributes)
+      ? original.item_attributes.find((a) => a?.code === "condition" || a?.item_attribute_id === "condition")
+      : null;
+    const ids = fromAttrs?.ids || fromAttrs?.item_attribute_option_ids || original.condition_ids;
+    if (Array.isArray(ids) && ids.length) return ids;
+    return [original.status_id || valueId(original.status)].filter(Boolean);
+  }
+
+  function cleanPayload(value) {
+    if (Array.isArray(value)) return value.map(cleanPayload).filter((x) => x !== undefined && x !== "");
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value)
+          .map(([k, v]) => [k, cleanPayload(v)])
+          .filter(([, v]) => v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0)),
+      );
+    }
+    return value;
+  }
+
   async function deleteOldItem(itemId) {
     const attempts = [
       { path: `/api/v2/items/${itemId}`, init: { method: "DELETE" } },
@@ -310,7 +342,7 @@
 
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
-    const { tempUuid } = await getUploadContext();
+    const { uploadSessionId, tempUuid } = await getUploadContext();
     const photoIds = [];
     for (const p of photos) {
       const id = await uploadPhotoDataUrl(p, tempUuid);
@@ -318,12 +350,11 @@
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
-    const item = compact({
-      id: "null",
+    const item = cleanPayload({
       temp_uuid: tempUuid,
       title: original.title,
       description: original.description || original.title || "",
-      price: String(price),
+      price: Number(price),
       currency: currency || original.currency || original.price?.currency_code || original.price?.currency,
       catalog_id: original.catalog_id || valueId(original.catalog),
       brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand),
@@ -334,18 +365,32 @@
       color_ids: extractColorIds(original),
       material_id: original.material_id,
       material_ids: original.material_ids,
-      item_attributes: original.item_attributes,
+      item_attributes: Array.isArray(original.item_attributes) && original.item_attributes.length
+        ? original.item_attributes
+        : [{ code: "condition", ids: extractConditionIds(original) }],
       isbn: original.isbn,
       is_unisex: !!original.is_unisex,
       is_for_swap: !!original.is_for_swap,
       is_for_sell: original.is_for_sell !== false,
-      shipment_prices: original.shipment_prices || { domestic: "null", international: "null" },
+      ...(original.shipment_prices ? { shipment_prices: original.shipment_prices } : {}),
       assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
     });
 
-    const body = { item, feedback_id: null, push_up: false };
-    const created = await vintedApi(`/api/v2/items`, {
+    const body = {
+      item,
+      feedback_id: null,
+      push_up: false,
+      parcel: null,
+      upload_session_id: uploadSessionId,
+    };
+    const created = await vintedApi(`/api/v2/item_upload/items`, {
       method: "POST",
+      headers: {
+        "X-Upload-Form": "true",
+        "X-Enable-Dynamic-Attribute-Condition": "true",
+        "X-Enable-Dynamic-Attribute-Video-Game-Rating": "true",
+      },
+      referrer: `${origin}/items/new`,
       body: JSON.stringify(body),
     });
     const newId = created?.item?.id ?? created?.id;
