@@ -66,6 +66,7 @@ function tabMsg(tabId, msg) {
 async function ensureVintedScripts(tabId) {
   // Vinted blokuje <script src="chrome-extension://..."> przez CSP, dlatego bridge
   // musi być wstrzyknięty oficjalnym API Chrome do MAIN world.
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   await chrome.scripting.executeScript({ target: { tabId }, files: ["page-bridge.js"], world: "MAIN" });
 }
 
