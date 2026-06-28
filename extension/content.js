@@ -377,6 +377,8 @@
 
   async function deleteOldItem(itemId) {
     const attempts = [
+      { path: `/api/v2/items/${itemId}`, init: { method: "DELETE", useApiHost: true } },
+      { path: `/api/v2/items/${itemId}/delete`, init: { method: "POST", body: JSON.stringify({}), useApiHost: true } },
       { path: `/api/v2/items/${itemId}`, init: { method: "DELETE" } },
       { path: `/api/v2/items/${itemId}/delete`, init: { method: "POST", body: JSON.stringify({}) } },
     ];
@@ -393,10 +395,59 @@
     throw new Error(`nowe ogłoszenie dodane, ale nie udało się usunąć starego (${last})`);
   }
 
+  // Budowa payloadu draftu — odpowiednik funkcji yu() z referencyjnej wtyczki Dotb.
+  function buildDraftPayload({ original, price, currency, photoIds, tempUuid }) {
+    const colorIds = extractColorIds(original);
+    const statusId = resolveStatusId(original);
+    if (!statusId) {
+      throw new Error("Brak stanu przedmiotu (status_id) w danych źródłowych");
+    }
+    const finalCurrency = currency
+      || original.currency
+      || original.price?.currency_code
+      || original.price?.currency
+      || "PLN";
+    const draft = {
+      id: null,
+      currency: finalCurrency,
+      temp_uuid: tempUuid,
+      title: original.title || "",
+      description: original.description || original.title || "",
+      brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand) || null,
+      brand: original.brand_title || valueTitle(original.brand_dto) || valueTitle(original.brand) || null,
+      size_id: original.size_id || valueId(original.size) || null,
+      catalog_id: original.catalog_id || valueId(original.catalog) || null,
+      isbn: original.isbn || null,
+      is_unisex: !!original.is_unisex,
+      status_id: statusId,
+      video_game_rating_id: original.video_game_rating_id ?? null,
+      ai_photo: false,
+      price: Number(price),
+      package_size_id: original.package_size_id || valueId(original.package_size) || null,
+      shipment_prices: { domestic: null, international: null },
+      color_ids: colorIds.filter((c) => c !== null && c !== undefined),
+      assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
+      measurement_length: original.measurement_length ?? null,
+      measurement_width: original.measurement_width ?? null,
+      manufacturer: original.manufacturer ?? null,
+      manufacturer_labelling: original.manufacturer_labelling ?? null,
+      model: original.model ?? null,
+    };
+    // Vinted nie lubi explicit nulls dla niektórych pól — usuwamy puste arraye,
+    // ale zachowujemy strukturę identyczną z referencją.
+    return draft;
+  }
+
+  // ===== Ponowne wystawianie (3-stopniowy flow z draftami, jak Dotb) =====
+  // 1) POST  api.vinted.{tld}/api/v2/photos                          → upload zdjęć (FormData)
+  // 2) POST  api.vinted.{tld}/api/v2/item_upload/drafts              → utworzenie draftu
+  // 3) POST  api.vinted.{tld}/api/v2/item_upload/drafts/:id/completion → publikacja
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
-    const { uploadSessionId, csrfToken } = await getUploadContext();
-    const tempUuid = uploadSessionId || newUuid();
+    const tempUuid = newUuid();
+    const csrfToken = readCsrfToken();
+
+    // 1) Upload zdjęć — endpoint /api/v2/photos na api.vinted.{tld}
     const photoIds = [];
     for (const p of photos) {
       const id = await uploadPhotoDataUrl(p, tempUuid, csrfToken);
@@ -404,64 +455,49 @@
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
 
-    const statusId = resolveStatusId(original);
-    if (!statusId) {
-      throw new Error("Brak stanu przedmiotu (status_id) — otwórz ogłoszenie ręcznie, ustaw stan i spróbuj ponownie");
-    }
-    const conditionIds = (Array.isArray(original.item_attributes)
-      ? original.item_attributes.find((a) => a?.code === "condition")
-      : null)?.ids || extractConditionIds(original);
-    const safeConditionIds = (Array.isArray(conditionIds) && conditionIds.length) ? conditionIds : [statusId];
-
-    const item = cleanPayload({
-      id: null,
-      temp_uuid: tempUuid,
-      title: original.title,
-      description: original.description || original.title || "",
-      price: Number(price),
-      currency: currency || original.currency || original.price?.currency_code || original.price?.currency,
-      catalog_id: original.catalog_id || valueId(original.catalog),
-      brand_id: original.brand_id || valueId(original.brand_dto) || valueId(original.brand),
-      brand: original.brand_title || valueTitle(original.brand_dto) || valueTitle(original.brand),
-      size_id: original.size_id || valueId(original.size),
-      status_id: statusId,
-      package_size_id: original.package_size_id || valueId(original.package_size),
-      color_ids: extractColorIds(original),
-      material_id: original.material_id,
-      material_ids: original.material_ids,
-      item_attributes: [{ code: "condition", ids: safeConditionIds }],
-      isbn: original.isbn,
-      is_unisex: !!original.is_unisex,
-      is_for_swap: !!original.is_for_swap,
-      is_for_sell: original.is_for_sell !== false,
-      ...(original.shipment_prices ? { shipment_prices: original.shipment_prices } : {}),
-      assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
-    });
-
-    const body = {
-      item,
-      feedback_id: null,
-      push_up: false,
-      parcel: null,
-      upload_session_id: uploadSessionId,
-    };
-    const created = await vintedApi(`/api/v2/item_upload/items`, {
+    // 2) Utworzenie draftu
+    const draft = buildDraftPayload({ original, price, currency, photoIds, tempUuid });
+    const draftRes = await vintedApiHost(`/api/v2/item_upload/drafts`, {
       method: "POST",
-      headers: {
-        "X-Upload-Form": "true",
-        "X-Enable-Dynamic-Attribute-Condition": "true",
-        "X-Enable-Dynamic-Attribute-Video-Game-Rating": "true",
-        "X-Enable-Multiple-Size-Groups": "true",
-        "X-CSRF-Token": csrfToken,
-      },
-      referrer: `${origin}/items/new`,
+      headers: { "X-CSRF-Token": csrfToken || "" },
       csrfToken,
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        draft,
+        feedback_id: null,
+        parcel: null,
+        upload_session_id: tempUuid,
+      }),
     });
-    const newId = created?.item?.id ?? created?.id;
-    if (!newId) throw new Error("Vinted przyjął dodawanie, ale nie zwrócił ID nowego ogłoszenia");
-    await deleteOldItem(original.id);
-    return { newId, deletedOld: true };
+    const createdDraft = draftRes?.draft || draftRes;
+    const draftId = createdDraft?.id;
+    if (!draftId) throw new Error("Vinted nie zwrócił ID draftu");
+
+    // 3) Publikacja draftu — completion zwraca finalny item
+    const completedRes = await vintedApiHost(`/api/v2/item_upload/drafts/${draftId}/completion`, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken || "" },
+      csrfToken,
+      body: JSON.stringify({
+        draft: { ...draft, id: draftId },
+        feedback_id: null,
+        parcel: null,
+        push_up: false,
+        upload_session_id: tempUuid,
+      }),
+    });
+    const newId = completedRes?.item?.id ?? completedRes?.id;
+    if (!newId) throw new Error("Vinted przyjął draft, ale nie zwrócił ID opublikowanego ogłoszenia");
+
+    // 4) Usunięcie starego ogłoszenia (dopiero po sukcesie publikacji nowego)
+    let deletedOld = false;
+    let deleteError = null;
+    try {
+      await deleteOldItem(original.id);
+      deletedOld = true;
+    } catch (e) {
+      deleteError = e?.message || String(e);
+    }
+    return { newId, deletedOld, deleteError };
   }
 
   // ===== Auto-reply =====
