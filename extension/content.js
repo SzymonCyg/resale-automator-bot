@@ -3,28 +3,39 @@
   const host = location.hostname.replace(/^www\./, "");
   const country = host.split(".").pop();
 
-  async function vintedApi(path, init = {}) {
+  function getCookie(name) {
+    return document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith(name + "="))?.split("=")[1];
+  }
+
+  function buildHeaders(init = {}, hasBody = false) {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    const anon = getCookie("anon_id") || getCookie("anonymous-locale") || "";
+    const h = {
+      Accept: "application/json, text/plain, */*",
+      "X-CSRF-Token": csrf || "",
+      ...(anon ? { "X-Anon-Id": decodeURIComponent(anon) } : {}),
+      ...(init.headers || {}),
+    };
+    if (hasBody && !h["Content-Type"]) h["Content-Type"] = "application/json";
+    return h;
+  }
+
+  async function vintedApi(path, init = {}) {
+    const hasBody = !!init.body;
     const res = await fetch(`https://${host}${path}`, {
       credentials: "include",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrf || "",
-        ...(init.headers || {}),
-      },
       ...init,
+      headers: buildHeaders(init, hasBody),
     });
-    if (!res.ok) throw new Error(`Vinted ${res.status}: ${await res.text().catch(() => "")}`);
+    if (!res.ok) throw new Error(`Vinted ${res.status}`);
     return res.json();
   }
 
   async function vintedRaw(path, init = {}) {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     return fetch(`https://${host}${path}`, {
       credentials: "include",
-      headers: { "X-CSRF-Token": csrf || "", ...(init.headers || {}) },
       ...init,
+      headers: buildHeaders(init, !!init.body),
     });
   }
 
