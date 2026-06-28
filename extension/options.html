@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vinted Manager — Ustawienia</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { max-width: 700px; margin: 32px auto; padding: 0 16px; font-family: -apple-system, system-ui, sans-serif; background: #0f1420; color: #e6edf3; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      h2 { font-size: 14px; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.08em; color: #98a4b3; }
+      .card { background: #1a1f2b; border: 1px solid #2d3648; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+      label { display: block; font-size: 12px; color: #98a4b3; margin: 8px 0 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+      input, select, textarea, button { width: 100%; padding: 9px 10px; border-radius: 6px; border: 1px solid #2d3648; background: #232a39; color: #e6edf3; font: inherit; box-sizing: border-box; }
+      textarea { min-height: 60px; resize: vertical; }
+      button { background: #5eead4; color: #0b1220; border: none; font-weight: 600; cursor: pointer; }
+      button.secondary { background: transparent; color: #f87171; border: 1px solid #2d3648; }
+      .row { display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; align-items: end; margin-bottom: 8px; }
+      .rule { background: #232a39; border: 1px solid #2d3648; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+      .flex { display: flex; gap: 8px; align-items: center; }
+      .muted { font-size: 11px; color: #6b7689; }
+      #status { margin-top: 12px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Vinted Manager — Ustawienia lokalne</h1>
+    <p class="muted">Wszystko zapisuje się w wtyczce (chrome.storage). Działa tylko dopóki przeglądarka jest uruchomiona i masz otwartą zalogowaną kartę Vinted.</p>
+
+    <h2>Auto-bump</h2>
+    <div class="card">
+      <div class="flex">
+        <input type="checkbox" id="bumpEnabled" style="width: auto" />
+        <label for="bumpEnabled" style="margin: 0">Włącz automatyczne ponowne wystawianie</label>
+      </div>
+      <label for="bumpInterval">Interwał (godziny)</label>
+      <input type="number" id="bumpInterval" min="3" max="168" value="8" />
+      <p class="muted">Wtyczka spróbuje pchnąć każdy aktywny przedmiot raz na X godzin. Wymaga otwartej karty vinted.*.</p>
+    </div>
+
+    <h2>Auto-odpowiedzi</h2>
+    <div class="card">
+      <div id="rules"></div>
+      <button id="addRule" style="margin-top: 8px">+ Dodaj regułę</button>
+      <p class="muted" style="margin-top: 8px">Reguła = jeśli wiadomość pasuje do wzorca, wyślij odpowiedź. Sprawdzane co 5 min na otwartej karcie Vinted.</p>
+    </div>
+
+    <button id="save">Zapisz ustawienia</button>
+    <div id="status"></div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

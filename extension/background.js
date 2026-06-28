@@ -1,23 +1,23 @@
-// Background service worker — pętla zadań + zarządzanie sesją Supabase.
+// Background service worker — odświeżanie sesji + lokalna pętla auto-bump.
 const DEFAULT_PANEL_URL = "https://resale-automator-bot.lovable.app";
 
 async function getConfig() {
-  const { panelUrl, session, supabaseUrl, supabaseAnonKey, deviceToken, user } =
+  const { panelUrl, session, supabaseUrl, supabaseAnonKey, user, settings } =
     await chrome.storage.local.get([
       "panelUrl",
       "session",
       "supabaseUrl",
       "supabaseAnonKey",
-      "deviceToken",
       "user",
+      "settings",
     ]);
   return {
     panelUrl: panelUrl || DEFAULT_PANEL_URL,
     session,
     supabaseUrl,
     supabaseAnonKey,
-    deviceToken,
     user,
+    settings: settings || { bumpEnabled: false, bumpIntervalHours: 8, replies: [] },
   };
 }
 
@@ -33,10 +33,7 @@ async function refreshSession() {
     },
     body: JSON.stringify({ refresh_token: session.refresh_token }),
   });
-  if (!res.ok) {
-    console.warn("[Vinted Manager] refresh failed", res.status);
-    return null;
-  }
+  if (!res.ok) return null;
   const fresh = await res.json();
   const next = {
     access_token: fresh.access_token,
@@ -58,129 +55,103 @@ async function getValidAccessToken() {
   return session.access_token;
 }
 
-async function api(path, opts = {}) {
-  const { panelUrl, deviceToken } = await getConfig();
+async function postSyncItems(payload) {
+  const { panelUrl } = await getConfig();
   const token = await getValidAccessToken();
-  const headers = {
-    "Content-Type": "application/json",
-    ...(opts.headers || {}),
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  else if (deviceToken) headers["X-Device-Token"] = deviceToken;
-  else throw new Error("Wtyczka niezalogowana");
-
-  let res = await fetch(`${panelUrl}${path}`, { ...opts, headers });
-  if (res.status === 401 && token) {
-    const fresh = await refreshSession();
-    if (fresh?.access_token) {
-      headers["Authorization"] = `Bearer ${fresh.access_token}`;
-      res = await fetch(`${panelUrl}${path}`, { ...opts, headers });
-    }
-  }
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!token) throw new Error("Wtyczka niezalogowana");
+  const res = await fetch(`${panelUrl}/api/public/extension/sync-items`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Sync ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create("vintedTick", { periodInMinutes: 5 });
+  chrome.alarms.create("vintedTick", { periodInMinutes: 30 });
   chrome.alarms.create("vintedRefresh", { periodInMinutes: 30 });
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   try {
-    if (alarm.name === "vintedTick") await processTasks();
     if (alarm.name === "vintedRefresh") await refreshSession();
+    if (alarm.name === "vintedTick") await runBumpIfDue();
   } catch (e) {
-    console.warn("[Vinted Manager] alarm error:", e);
+    console.warn("[Vinted Manager] alarm:", e);
   }
 });
 
-async function processTasks() {
-  const token = await getValidAccessToken();
-  const { deviceToken } = await getConfig();
-  if (!token && !deviceToken) return;
-  const { tasks } = await api("/api/public/extension/tasks", { method: "GET" });
-  if (!tasks?.length) return;
+async function runBumpIfDue() {
+  const { settings } = await getConfig();
+  if (!settings?.bumpEnabled) return;
+  const { lastBumpAt } = await chrome.storage.local.get(["lastBumpAt"]);
+  const intervalMs = (settings.bumpIntervalHours || 8) * 3600 * 1000;
+  if (lastBumpAt && Date.now() - lastBumpAt < intervalMs) return;
 
   const tabs = await chrome.tabs.query({
     url: [
-      "*://*.vinted.pl/*",
-      "*://*.vinted.fr/*",
-      "*://*.vinted.de/*",
-      "*://*.vinted.com/*",
+      "*://*.vinted.pl/*", "*://*.vinted.fr/*", "*://*.vinted.de/*",
+      "*://*.vinted.es/*", "*://*.vinted.it/*", "*://*.vinted.nl/*",
+      "*://*.vinted.cz/*", "*://*.vinted.sk/*", "*://*.vinted.co.uk/*",
     ],
   });
   const tab = tabs[0];
-  if (!tab) {
-    console.log("[Vinted Manager] Brak otwartej karty Vinted — zadania poczekają.");
-    return;
-  }
-
-  for (const task of tasks) {
-    try {
-      const result = await chrome.tabs.sendMessage(tab.id, { kind: "RUN_TASK", task });
-      await api("/api/public/extension/tasks", {
-        method: "POST",
-        body: JSON.stringify({
-          taskId: task.id,
-          status: result?.ok ? "done" : "error",
-          result: result?.data ?? null,
-          message: result?.message ?? null,
-        }),
-      });
-    } catch (e) {
-      await api("/api/public/extension/tasks", {
-        method: "POST",
-        body: JSON.stringify({
-          taskId: task.id,
-          status: "error",
-          message: e?.message ?? String(e),
-        }),
-      });
-    }
+  if (!tab?.id) return;
+  try {
+    await chrome.tabs.sendMessage(tab.id, { kind: "RUN_BUMP" });
+    await chrome.storage.local.set({ lastBumpAt: Date.now() });
+  } catch (e) {
+    console.warn("[Vinted Manager] bump send failed:", e);
   }
 }
 
-// Sync z content scriptu (Vinted tab)
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.kind === "SYNC_ITEMS") {
-    api("/api/public/extension/sync-items", {
-      method: "POST",
-      body: JSON.stringify(msg.payload),
-    })
-      .then((r) => sendResponse({ ok: true, r }))
-      .catch((e) => sendResponse({ ok: false, error: e.message }));
-    return true;
-  }
-  if (msg.kind === "MATCH_REPLY") {
-    api("/api/public/extension/match-reply", {
-      method: "POST",
-      body: JSON.stringify(msg.payload),
-    })
+    postSyncItems(msg.payload)
       .then((r) => sendResponse({ ok: true, r }))
       .catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   }
   if (msg.kind === "GET_STATUS") {
-    getConfig().then(({ user, panelUrl, session }) =>
-      sendResponse({ user: user ?? null, panelUrl, signedIn: !!session?.access_token }),
+    getConfig().then(({ user, panelUrl, session, settings }) =>
+      sendResponse({
+        user: user ?? null,
+        panelUrl,
+        signedIn: !!session?.access_token,
+        settings,
+      }),
     );
     return true;
   }
+  if (msg.kind === "SAVE_SETTINGS") {
+    chrome.storage.local.set({ settings: msg.settings }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
   if (msg.kind === "SIGN_OUT") {
-    chrome.storage.local.remove(["session", "user", "supabaseUrl", "supabaseAnonKey"]).then(() =>
-      sendResponse({ ok: true }),
-    );
+    chrome.storage.local
+      .remove(["session", "user", "supabaseUrl", "supabaseAnonKey"])
+      .then(() => sendResponse({ ok: true }));
     return true;
   }
 });
 
-// Wiadomość ze strony panelu (Google login flow)
+// Wiadomość ze strony panelu (Google login → przekazanie sesji)
 chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
   if (msg?.kind !== "SUPABASE_SESSION") return;
   const origin = sender.origin || "";
-  if (!/\.lovable\.(app|dev)$/.test(new URL(origin).hostname) && !origin.startsWith("http://localhost")) {
-    sendResponse({ ok: false, error: "forbidden origin" });
+  try {
+    const host = new URL(origin).hostname;
+    const ok = /\.lovable\.(app|dev)$/.test(host) || host === "localhost";
+    if (!ok) {
+      sendResponse({ ok: false, error: "forbidden origin" });
+      return;
+    }
+  } catch {
+    sendResponse({ ok: false, error: "bad origin" });
     return;
   }
   const { session, user, supabaseUrl, supabaseAnonKey, panelUrl } = msg;

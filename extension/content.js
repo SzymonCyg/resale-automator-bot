@@ -1,15 +1,19 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const domain = location.hostname.replace(/^www\./, "");
+  const host = location.hostname.replace(/^www\./, "");
+  const country = host.split(".").pop(); // pl, fr, de...
 
-  async function vintedApi(path) {
+  async function vintedApi(path, init = {}) {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
-    const res = await fetch(`https://${domain}${path}`, {
+    const res = await fetch(`https://${host}${path}`, {
       credentials: "include",
       headers: {
         Accept: "application/json",
+        "Content-Type": "application/json",
         "X-CSRF-Token": csrf || "",
+        ...(init.headers || {}),
       },
+      ...init,
     });
     if (!res.ok) throw new Error(`Vinted ${res.status}`);
     return res.json();
@@ -23,9 +27,9 @@
       if (!userId) return;
       const items = await vintedApi(`/api/v2/users/${userId}/items?per_page=200`);
       const payload = {
-        // accountId musi przyjść z panelu — wybieramy po username
-        username,
-        userId: String(userId),
+        vintedUserId: String(userId),
+        vintedUsername: username,
+        country,
         items: (items?.items ?? []).map((it) => ({
           vinted_item_id: String(it.id),
           title: it.title,
@@ -42,55 +46,91 @@
           created_at_vinted: it.created_at_ts ?? null,
         })),
       };
-      // Wyślij do background z kontekstem
-      const cfg = await chrome.storage.local.get(["accountMap"]);
-      const accountId = (cfg.accountMap ?? {})[username];
-      if (!accountId) {
-        console.log("[Vinted Manager] Brak mapowania konta dla", username, "— otwórz panel i wybierz konto.");
-        return;
-      }
-      chrome.runtime.sendMessage({
-        kind: "SYNC_ITEMS",
-        payload: {
-          accountId,
-          vintedUserId: payload.userId,
-          vintedUsername: payload.username,
-          items: payload.items,
-        },
-      });
+      const resp = await chrome.runtime.sendMessage({ kind: "SYNC_ITEMS", payload });
+      console.log("[Vinted Manager] sync:", resp);
     } catch (e) {
       console.warn("[Vinted Manager] sync error:", e);
     }
   }
 
-  async function runTask(task) {
+  async function runBump() {
     try {
-      if (task.type === "bump") {
-        const ids = task.payload?.item_ids ?? [];
-        // TODO: prawdziwy endpoint push-up zależy od Vinted (różny per kraj)
-        // tutaj placeholder — wymaga reverse engineering aktualnego API
-        for (const id of ids) {
-          await vintedApi(`/api/v2/items/${id}/push_ups`).catch(() => null);
+      const me = await vintedApi("/api/v2/users/current");
+      const userId = me?.user?.id;
+      if (!userId) return;
+      const items = await vintedApi(`/api/v2/users/${userId}/items?per_page=200`);
+      const ids = (items?.items ?? []).map((i) => i.id);
+      console.log(`[Vinted Manager] auto-bump: próba ${ids.length} przedmiotów`);
+      for (const id of ids) {
+        try {
+          // Endpoint push-up bywa różny per kraj / wersja Vinted.
+          // Najczęściej działa: POST /api/v2/items/{id}/push_ups
+          await vintedApi(`/api/v2/items/${id}/push_ups`, { method: "POST", body: "{}" });
+          await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
+        } catch (e) {
+          console.warn("[Vinted Manager] bump fail", id, e.message);
         }
-        return { ok: true, data: { count: ids.length } };
       }
-      if (task.type === "reply") {
-        // TODO: wysłanie wiadomości — wymaga aktualnego endpointu Vinted
-        return { ok: true, data: { sent: true } };
-      }
-      return { ok: false, message: "unknown task type" };
     } catch (e) {
-      return { ok: false, message: e?.message ?? String(e) };
+      console.warn("[Vinted Manager] bump error:", e);
     }
   }
 
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.kind === "RUN_TASK") {
-      runTask(msg.task).then(sendResponse);
+  function matchRule(text, rule) {
+    if (!text || !rule?.pattern) return false;
+    const t = text.toLowerCase();
+    const p = rule.pattern.toLowerCase();
+    switch (rule.matchType) {
+      case "exact": return t === p;
+      case "starts_with": return t.startsWith(p);
+      case "regex": try { return new RegExp(rule.pattern, "i").test(text); } catch { return false; }
+      case "contains":
+      default: return t.includes(p);
+    }
+  }
+
+  async function runReplies() {
+    const { settings } = await chrome.storage.local.get(["settings"]);
+    const rules = settings?.replies ?? [];
+    if (!rules.length) return;
+    try {
+      // Pobieramy wątki
+      const inbox = await vintedApi("/api/v2/inbox?per_page=20").catch(() => null);
+      const threads = inbox?.threads ?? inbox?.conversations ?? [];
+      for (const th of threads) {
+        const lastMsg = th.last_message?.body ?? th.preview ?? "";
+        const fromMe = th.last_message?.user_id && th.last_message.user_id === th.current_user_id;
+        if (fromMe) continue;
+        const match = rules.find((r) => r.enabled !== false && matchRule(lastMsg, r));
+        if (!match) continue;
+        const threadId = th.id ?? th.thread_id;
+        if (!threadId) continue;
+        await vintedApi(`/api/v2/inbox/${threadId}/messages`, {
+          method: "POST",
+          body: JSON.stringify({ message: { body: match.response } }),
+        }).catch((e) => console.warn("[Vinted Manager] reply fail", e));
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    } catch (e) {
+      console.warn("[Vinted Manager] replies error:", e);
+    }
+  }
+
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg.kind === "RUN_BUMP") {
+      runBump().then(() => sendResponse({ ok: true }));
+      return true;
+    }
+    if (msg.kind === "RUN_REPLIES") {
+      runReplies().then(() => sendResponse({ ok: true }));
       return true;
     }
   });
 
-  // synchronizuj raz przy załadowaniu
+  // Sync raz przy załadowaniu + co 10 min jeśli karta otwarta
   syncMyItems();
+  setInterval(syncMyItems, 10 * 60 * 1000);
+  // Auto-odpowiedzi co 5 min
+  runReplies();
+  setInterval(runReplies, 5 * 60 * 1000);
 })();

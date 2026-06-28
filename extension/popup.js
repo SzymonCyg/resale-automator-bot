@@ -18,12 +18,8 @@ async function refresh() {
 $("signin").addEventListener("click", async () => {
   const panelUrl = ($("panelUrl").value.trim() || DEFAULT_PANEL_URL).replace(/\/$/, "");
   await chrome.storage.local.set({ panelUrl });
-  const url = `${panelUrl}/extension-connect?extId=${chrome.runtime.id}`;
-  await chrome.tabs.create({ url });
-  const msg = $("msg");
-  msg.className = "status ok";
-  msg.textContent = "Otwarto panel — zaloguj się i wróć tutaj.";
-  // Refresh popup state when storage updates (session arrives from panel)
+  await chrome.tabs.create({ url: `${panelUrl}/extension-connect?extId=${chrome.runtime.id}` });
+  $("msg").innerHTML = '<div class="status ok">Otwarto panel — zaloguj się i wróć tutaj.</div>';
   const listener = (changes) => {
     if (changes.session) {
       chrome.storage.onChanged.removeListener(listener);
@@ -32,6 +28,8 @@ $("signin").addEventListener("click", async () => {
   };
   chrome.storage.onChanged.addListener(listener);
 });
+
+$("openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 $("signout").addEventListener("click", async () => {
   await chrome.runtime.sendMessage({ kind: "SIGN_OUT" });
