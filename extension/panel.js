@@ -189,17 +189,23 @@ function closeRelist() {
 }
 
 async function loadPhoto(url) {
-  // wczytaj jako dataURL przez fetch (content_script tab nie potrzebne — Vinted serwuje obrazki publicznie)
-  const res = await fetch(url);
-  const blob = await res.blob();
-  const dataUrl = await new Promise((res2) => {
-    const fr = new FileReader();
-    fr.onload = () => res2(fr.result);
-    fr.readAsDataURL(blob);
-  });
-  const img = await new Promise((res2) => {
+  // 1) próba bezpośrednia (extension ma host_permissions dla vinted.net)
+  let dataUrl = null;
+  try {
+    const res = await fetch(url, { mode: "cors", credentials: "omit" });
+    if (!res.ok) throw new Error("status " + res.status);
+    const blob = await res.blob();
+    dataUrl = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+  } catch (e) {
+    // 2) fallback przez background (ma uprawnienia do host_permissions)
+    const r = await bg("FETCH_PHOTO", { url });
+    if (!r?.ok) throw new Error(r?.error || "Nie mogę pobrać zdjęcia");
+    dataUrl = r.dataUrl;
+  }
+  const img = await new Promise((res2, rej) => {
     const i = new Image();
     i.onload = () => res2(i);
+    i.onerror = () => rej(new Error("decode fail"));
     i.src = dataUrl;
   });
   return { dataUrl, w: img.naturalWidth, h: img.naturalHeight, url };
@@ -291,16 +297,12 @@ function drawPhoto(i, j) {
   img.src = p.dataUrl;
 }
 
-// Bulk price
+// Bulk price (procent)
 $("#applyBulkPrice").addEventListener("click", () => {
-  const op = $("#bulkPriceOp").value;
-  const v = Number($("#bulkPriceVal").value) || 0;
-  if (op === "none") return;
+  const pct = Number($("#bulkPricePct").value);
+  if (!Number.isFinite(pct) || pct === 0) return;
   relistState.forEach((st) => {
-    if (op === "set") st.price = v;
-    else if (op === "add") st.price = +(st.price + v).toFixed(2);
-    else if (op === "sub") st.price = Math.max(0, +(st.price - v).toFixed(2));
-    else if (op === "pct") st.price = +(st.price * (1 + v / 100)).toFixed(2);
+    st.price = Math.max(0, +(st.price * (1 + pct / 100)).toFixed(2));
   });
   renderRelist();
 });
