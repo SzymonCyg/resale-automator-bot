@@ -25,16 +25,27 @@
     return document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith(name + "="))?.split("=")[1];
   }
 
+  function readCsrfTokenFromText(text) {
+    return String(text || "").match(/CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
+      || String(text || "").match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/i)?.[1]
+      || String(text || "").match(/<meta\s+content="([^"]+)"\s+name="csrf-token"/i)?.[1]
+      || String(text || "").match(/"csrfToken"\s*:\s*"([^"]+)"/i)?.[1]
+      || String(text || "").match(/"csrf_token"\s*:\s*"([^"]+)"/i)?.[1]
+      || "";
+  }
+
+  function readCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || readCsrfTokenFromText(document.documentElement.innerHTML);
+  }
+
   function buildHeaders(init = {}, hasBody = false) {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    const csrf = init.csrfToken || readCsrfToken();
     const anon = getCookie("anon_id") || getCookie("anonymous-locale") || "";
-    const accessToken = getCookie("access_token_web");
     const skipXRequestedWith = init.skipXRequestedWith;
     const h = {
       Accept: "application/json, text/plain, */*",
       "X-CSRF-Token": csrf || "",
       ...(anon ? { "X-Anon-Id": decodeURIComponent(anon) } : {}),
-      ...(accessToken ? { Authorization: `Bearer ${decodeURIComponent(accessToken)}` } : {}),
       ...(init.headers || {}),
     };
     if (!skipXRequestedWith) h["X-Requested-With"] = h["X-Requested-With"] || "XMLHttpRequest";
@@ -72,9 +83,10 @@
   }
 
   function pageFetch(path, init = {}) {
-    const { skipXRequestedWith, ...fetchInit } = init;
+    const { skipXRequestedWith, csrfToken, ...fetchInit } = init;
     return bridgeRequest("FETCH", {
       path,
+      csrfToken,
       init: {
         ...fetchInit,
         skipXRequestedWith,
@@ -83,10 +95,11 @@
     });
   }
 
-  function pageUploadPhoto(dataUrl, tempUuid) {
+  function pageUploadPhoto(dataUrl, tempUuid, csrfToken) {
     return bridgeRequest("UPLOAD_PHOTO", {
       dataUrl,
       tempUuid,
+      csrfToken,
       filename: `photo-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
     }, 60000);
   }
@@ -263,17 +276,19 @@
     const uploadSessionId = text.match(/\\"uploadSessionId\\"\s*:\s*\\"([^\\]+)\\"/i)?.[1]
       || text.match(/"uploadSessionId"\s*:\s*"([^"]+)"/i)?.[1]
       || text.match(/uploadSessionId["\\:]+([^"\\]+)["\\]?/i)?.[1];
+    const csrfToken = readCsrfTokenFromText(text) || readCsrfToken();
     const tempUuid = text.match(/"tempUuid"\s*:\s*"([^"\\]+)"/i)?.[1]
       || text.match(/"temp_uuid"\s*:\s*"([^"\\]+)"/i)?.[1]
       || text.match(/tempUuid\s*[:=]\s*["']([^"']+)["']/i)?.[1]
       || crypto.randomUUID?.();
     if (!uploadSessionId) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak uploadSessionId)");
     if (!tempUuid) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak tempUuid)");
-    return { uploadSessionId, tempUuid };
+    if (!csrfToken) throw new Error("Nie mogę przygotować formularza dodawania ogłoszenia (brak CSRF tokenu)");
+    return { uploadSessionId, tempUuid, csrfToken };
   }
 
-  async function uploadPhotoDataUrl(dataUrl, tempUuid) {
-    const res = await pageUploadPhoto(dataUrl, tempUuid);
+  async function uploadPhotoDataUrl(dataUrl, tempUuid, csrfToken) {
+    const res = await pageUploadPhoto(dataUrl, tempUuid, csrfToken);
     if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
     const j = res.json;
     const id = j?.photo?.id ?? j?.id;
@@ -342,10 +357,10 @@
 
   async function relistItem({ original, price, currency, photos }) {
     await ensureExtensionSignedIn();
-    const { uploadSessionId, tempUuid } = await getUploadContext();
+    const { uploadSessionId, tempUuid, csrfToken } = await getUploadContext();
     const photoIds = [];
     for (const p of photos) {
-      const id = await uploadPhotoDataUrl(p, tempUuid);
+      const id = await uploadPhotoDataUrl(p, tempUuid, csrfToken);
       if (id) photoIds.push(id);
     }
     if (!photoIds.length) throw new Error("Brak poprawnie wgranych zdjęć — przerwano dodawanie");
@@ -389,8 +404,10 @@
         "X-Upload-Form": "true",
         "X-Enable-Dynamic-Attribute-Condition": "true",
         "X-Enable-Dynamic-Attribute-Video-Game-Rating": "true",
+        "X-CSRF-Token": csrfToken,
       },
       referrer: `${origin}/items/new`,
+      csrfToken,
       body: JSON.stringify(body),
     });
     const newId = created?.item?.id ?? created?.id;
