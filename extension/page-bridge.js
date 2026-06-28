@@ -1,6 +1,8 @@
 (function () {
-  if (window.__VM_PAGE_BRIDGE__) return;
+  const BRIDGE_VERSION = "0.5.8";
+  if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
+  window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
 
   function getCookie(name) {
     return document.cookie
@@ -51,7 +53,7 @@
   window.addEventListener("message", async (event) => {
     if (event.source !== window) return;
     const msg = event.data;
-    if (!msg || msg.source !== "VM_CONTENT" || !msg.kind || !msg.id) return;
+    if (!msg || msg.source !== "VM_CONTENT_058" || !msg.kind || !msg.id) return;
 
     try {
       const csrf = msg.csrfToken || readCsrfToken();
@@ -85,7 +87,7 @@
         });
 
         window.postMessage(
-          { source: "VM_PAGE_BRIDGE", id: msg.id, ok: true, response: await toPayload(response) },
+          { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: await toPayload(response) },
           window.location.origin,
         );
         return;
@@ -121,13 +123,13 @@
       });
 
       window.postMessage(
-        { source: "VM_PAGE_BRIDGE", id: msg.id, ok: true, response: await toPayload(response) },
+        { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: await toPayload(response) },
         window.location.origin,
       );
     } catch (error) {
       window.postMessage(
         {
-          source: "VM_PAGE_BRIDGE",
+          source: "VM_PAGE_BRIDGE_058",
           id: msg.id,
           ok: false,
           error: `${msg.kind}${msg.path ? ` ${msg.path}` : ""}: ${error?.message || String(error)}`,
