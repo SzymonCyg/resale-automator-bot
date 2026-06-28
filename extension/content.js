@@ -405,9 +405,34 @@
     throw new Error(`nowe ogłoszenie dodane, ale nie udało się usunąć starego (${last})`);
   }
 
+  // Synchronizacja status_id <-> item_attributes[condition] (jak CZ() w Dotb)
+  function syncConditionAttr(draft) {
+    const statusId = draft.status_id;
+    const attrs = draft.item_attributes ?? [];
+    const condAttr = attrs.find((a) => a.code === "condition");
+    if (statusId && condAttr === undefined) {
+      return { ...draft, item_attributes: [...attrs, { code: "condition", ids: [statusId] }] };
+    } else if (!statusId && condAttr?.ids?.[0]) {
+      return { ...draft, status_id: condAttr.ids[0] };
+    }
+    return draft;
+  }
+
+  // Synchronizacja size_id <-> item_attributes[size] (jak NZ() w Dotb)
+  function syncSizeAttr(draft) {
+    const sizeId = draft.size_id;
+    const attrs = draft.item_attributes ?? [];
+    const sizeAttr = attrs.find((a) => a.code === "size");
+    if (sizeId && sizeAttr === undefined) {
+      return { ...draft, item_attributes: [...attrs, { code: "size", ids: [sizeId] }] };
+    } else if (!sizeId && sizeAttr?.ids?.[0]) {
+      return { ...draft, size_id: sizeAttr.ids[0] };
+    }
+    return draft;
+  }
+
   // Budowa payloadu draftu — odpowiednik funkcji yu() z referencyjnej wtyczki Dotb.
   function buildDraftPayload({ original, price, currency, photoIds, tempUuid }) {
-    const colorIds = extractColorIds(original);
     const statusId = resolveStatusId(original);
     if (!statusId) {
       throw new Error("Brak stanu przedmiotu (status_id) w danych źródłowych");
@@ -435,18 +460,18 @@
       price: Number(price),
       package_size_id: original.package_size_id || valueId(original.package_size) || null,
       shipment_prices: { domestic: null, international: null },
-      color_ids: colorIds.filter((c) => c !== null && c !== undefined),
+      color_ids: [original.color1_id, original.color2_id].filter((c) => c !== null && c !== undefined),
       assigned_photos: photoIds.map((id) => ({ id, orientation: 0 })),
+      item_attributes: original.item_attributes || [],
       measurement_length: original.measurement_length ?? null,
       measurement_width: original.measurement_width ?? null,
       manufacturer: original.manufacturer ?? null,
       manufacturer_labelling: original.manufacturer_labelling ?? null,
       model: original.model ?? null,
     };
-    // Vinted nie lubi explicit nulls dla niektórych pól — usuwamy puste arraye,
-    // ale zachowujemy strukturę identyczną z referencją.
-    return draft;
+    return syncSizeAttr(syncConditionAttr(draft));
   }
+
 
   // ===== Ponowne wystawianie (3-stopniowy flow z draftami, jak Dotb) =====
   // 1) POST  api.vinted.{tld}/api/v2/photos                          → upload zdjęć (FormData)
