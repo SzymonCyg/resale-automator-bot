@@ -341,8 +341,9 @@
     return { uploadSessionId, csrfToken };
   }
 
-  async function uploadPhotoDataUrl(dataUrl, tempUuid, csrfToken) {
-    const res = await pageUploadPhoto(dataUrl, tempUuid, csrfToken);
+  async function uploadPhotoDataUrl(dataUrl, _tempUuid, csrfToken) {
+    const res = await pageUploadPhoto(dataUrl, csrfToken);
+
     if (!res.ok) throw new Error(`upload zdjęcia ${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`);
     const j = res.json;
     const id = j?.photo?.id ?? j?.id;
