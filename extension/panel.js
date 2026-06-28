@@ -43,10 +43,20 @@ function tabMsg(tabId, msg) {
 }
 
 // ---------- WHOAMI ----------
-(async () => {
-  const status = await bg("GET_STATUS");
-  $("#whoami").textContent = status?.user?.email ? `Zalogowano: ${status.user.email}` : "Niezalogowano do panelu";
-})();
+async function loadWhoami() {
+  const el = $("#whoami");
+  el.textContent = "Sprawdzam sesję Vinted...";
+  const tab = await getVintedTab();
+  if (!tab) { el.textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
+  try {
+    const r = await tabMsg(tab.id, { kind: "GET_ME" });
+    if (r?.ok && r.username) el.textContent = `Zalogowano: ${r.username}`;
+    else el.textContent = "Niezalogowany na Vinted";
+  } catch (e) {
+    el.textContent = "Brak połączenia z kartą Vinted";
+  }
+}
+loadWhoami();
 
 // ---------- ITEMS ----------
 async function loadItems() {
