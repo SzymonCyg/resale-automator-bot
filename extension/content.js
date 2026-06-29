@@ -633,7 +633,7 @@
       if (!isBacklog) break; // live: tylko 1 strona
       if (pagination.total_pages && page >= pagination.total_pages) break;
       page++;
-      await alSleep(alRand(300, 600));
+      await alSleep(alRand(2000, 4000));
     }
 
     return collected;
@@ -649,6 +649,29 @@
         opposite_user_id: Number(oppositeUserId),
       }),
     });
+  }
+
+  async function alCreateConversationSafe(itemId, userId, csrfToken) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await alCreateConversation(itemId, userId, csrfToken);
+        if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
+          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
+          await alSleep(alRand(90000, 120000));
+          continue;
+        }
+        return r;
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
+          await alSleep(alRand(90000, 120000));
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error('Rate limit — przekroczono liczbę prób');
   }
 
   function alCalcDiscount(orig, amount, unit) {
