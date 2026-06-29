@@ -394,54 +394,82 @@ $("#closePhotoEdit").addEventListener("click", () => {
   $("#photoEditOverlay").classList.add("hidden");
 });
 
+const peActiveIdx = {}; // i -> active photo index
+
 function openPhotoEditor() {
   if (!relistState.length) return;
   $("#photoEditOverlay").classList.remove("hidden");
   const body = $("#photoEditBody");
-  body.innerHTML = relistState.map((st, i) => `
+  body.innerHTML = relistState.map((st, i) => {
+    if (peActiveIdx[i] == null || peActiveIdx[i] >= st.photos.length) peActiveIdx[i] = 0;
+    const j = peActiveIdx[i];
+    return `
     <div class="pe-item" data-i="${i}">
       <h4>${escapeHtml(st.title || st.item.title || "")}</h4>
-      <div class="pe-photos">
-        ${st.photos.map((_, j) => `
-          <div class="pe-photo" data-j="${j}">
-            <div class="pe-canvas-wrap"><canvas width="560" height="560"></canvas></div>
-            <div class="pe-actions">
-              <button data-act="rotL">⟲ −90°</button>
-              <button data-act="rotR">⟳ +90°</button>
-              <button data-act="rotN1">−1°</button>
-              <button data-act="rot1">+1°</button>
-              <button data-act="cropClear">Resetuj crop</button>
-              <button data-act="reset">↺ Reset</button>
-              <button data-act="del">× Usuń</button>
-            </div>
-          </div>`).join("")}
+      <div class="pe-stage">
+        <button class="pe-nav prev" data-act="prev" ${st.photos.length<2?'disabled':''}>‹</button>
+        <div class="pe-photo" data-j="${j}">
+          <div class="pe-canvas-wrap"><canvas width="900" height="900"></canvas></div>
+          <div class="pe-counter">${j+1} / ${st.photos.length}</div>
+          <div class="pe-actions">
+            <button data-act="rotL">⟲ −90°</button>
+            <button data-act="rotR">⟳ +90°</button>
+            <button data-act="rotN1">−1°</button>
+            <button data-act="rot1">+1°</button>
+            <button data-act="cropClear">Resetuj crop</button>
+            <button data-act="reset">↺ Reset</button>
+            <button data-act="del">× Usuń</button>
+          </div>
+        </div>
+        <button class="pe-nav next" data-act="next" ${st.photos.length<2?'disabled':''}>›</button>
       </div>
-    </div>`).join("");
+      <div class="pe-thumbs">
+        ${st.photos.map((p, k) => `
+          <button class="pe-thumb ${k===j?'active':''}" data-k="${k}" type="button">
+            <img src="${p.dataUrl}" alt="" />
+            <span>${k+1}</span>
+          </button>`).join("")}
+      </div>
+    </div>`;
+  }).join("");
+
   $$(".pe-item").forEach((row) => {
     const i = Number(row.dataset.i);
-    row.querySelectorAll(".pe-photo").forEach((pe) => {
-      const j = Number(pe.dataset.j);
-      const canvas = pe.querySelector("canvas");
-      drawEditorCanvas(canvas, relistState[i].photos[j]);
-      attachCropDrag(canvas, relistState[i].photos[j]);
-      pe.querySelectorAll(".pe-actions button").forEach((b) => {
-        b.addEventListener("click", () => {
-          const a = b.dataset.act;
-          const p = relistState[i].photos[j];
-          if (a === "del") {
-            if (relistState[i].photos.length <= 1) { alert("Min. 1 zdjęcie."); return; }
-            relistState[i].photos.splice(j, 1);
-            openPhotoEditor();
-            return;
-          }
-          if (a === "rotL") p.rotation -= 90;
-          else if (a === "rotR") p.rotation += 90;
-          else if (a === "rot1") p.rotation += 1;
-          else if (a === "rotN1") p.rotation -= 1;
-          else if (a === "cropClear") p.crop = null;
-          else if (a === "reset") { p.rotation = 0; p.crop = null; }
-          drawEditorCanvas(canvas, p);
-        });
+    const pe = row.querySelector(".pe-photo");
+    const j = Number(pe.dataset.j);
+    const canvas = pe.querySelector("canvas");
+    drawEditorCanvas(canvas, relistState[i].photos[j]);
+    attachCropDrag(canvas, relistState[i].photos[j]);
+
+    row.querySelectorAll(".pe-thumb").forEach((tb) => {
+      tb.addEventListener("click", () => {
+        peActiveIdx[i] = Number(tb.dataset.k);
+        openPhotoEditor();
+      });
+    });
+
+    row.querySelectorAll("[data-act]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const a = b.dataset.act;
+        const st = relistState[i];
+        const cj = peActiveIdx[i];
+        const p = st.photos[cj];
+        if (a === "prev") { peActiveIdx[i] = (cj - 1 + st.photos.length) % st.photos.length; openPhotoEditor(); return; }
+        if (a === "next") { peActiveIdx[i] = (cj + 1) % st.photos.length; openPhotoEditor(); return; }
+        if (a === "del") {
+          if (st.photos.length <= 1) { alert("Min. 1 zdjęcie."); return; }
+          st.photos.splice(cj, 1);
+          peActiveIdx[i] = Math.max(0, cj - 1);
+          openPhotoEditor();
+          return;
+        }
+        if (a === "rotL") p.rotation -= 90;
+        else if (a === "rotR") p.rotation += 90;
+        else if (a === "rot1") p.rotation += 1;
+        else if (a === "rotN1") p.rotation -= 1;
+        else if (a === "cropClear") p.crop = null;
+        else if (a === "reset") { p.rotation = 0; p.crop = null; }
+        drawEditorCanvas(canvas, p);
       });
     });
   });
