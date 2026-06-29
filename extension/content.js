@@ -545,32 +545,44 @@
   function alExtractLikeInfo(n) {
     const entryType = n?.entry_type ?? n?.entryType ?? n?.type;
     if (entryType !== 20 && entryType !== "20") return null;
-    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject_id ?? n?.subject?.id;
-    const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.notifier?.id ?? n?.actor?.id;
-    const login = n?.notifier?.login ?? n?.user?.login ?? n?.actor?.login ?? null;
+    // Dotb: parsuj link aby wyciągnąć offering_id/user_id oraz item_id
+    let linkUserId = null, linkItemId = null;
+    if (n?.link && typeof n.link === 'string') {
+      const qs = n.link.includes('?') ? n.link.split('?')[1] : '';
+      const params = new URLSearchParams(qs);
+      linkUserId = params.get('offering_id') || params.get('user_id');
+      linkItemId = params.get('item_id') || params.get('subject_id');
+    }
+    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject_id ?? n?.subject?.id ?? linkItemId;
+    const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.notifier?.id ?? n?.actor?.id ?? linkUserId;
+    // Dotb: login = pierwsze słowo w body
+    const bodyLogin = (typeof n?.body === 'string' && n.body.trim()) ? n.body.trim().split(/\s+/)[0] : null;
+    const login = n?.notifier?.login ?? n?.user?.login ?? n?.actor?.login ?? bodyLogin ?? null;
     const updatedAt = n?.updated_at ?? n?.created_at ?? n?.time ?? null;
     if (!itemId || !userId) return null;
     return { notifId: String(n.id), itemId: String(itemId), userId: String(userId), login, updatedAt };
   }
 
   async function alFetchNotificationsPage(page) {
+    // Dotb: nowy endpoint /inbox-notifications/v1/notifications (platform:web, X-Next-App:marketplace-web), fallback /api/v2/notifications
     const tries = [
-      `/web/api/notifications/notifications?page=${page}&per_page=20`,
-      `/api/v2/notifications?page=${page}&per_page=20`,
+      { path: `/inbox-notifications/v1/notifications?page=${page}&per_page=20`, headers: { platform: "web", "X-Next-App": "marketplace-web" } },
+      { path: `/api/v2/notifications?page=${page}&per_page=20`, headers: {} },
     ];
     for (let attempt = 0; attempt < 3; attempt++) {
       let rateLimited = false;
-      for (const path of tries) {
+      for (const t of tries) {
         try {
-          const r = await vintedApi(path);
-          if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
-            await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
-            rateLimited = true;
-            break;
-          }
-          const arr = r?.notifications ?? r?.data;
-          if (Array.isArray(arr)) {
-            return { notifications: arr, pagination: r?.pagination || {} };
+          const res = await vintedRaw(t.path, { headers: t.headers });
+          if (res?.ok && res?.json) {
+            const r = res.json;
+            if (r.message_code === 'rate_limit_exceeded' || r.code === 106) {
+              await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
+              rateLimited = true;
+              break;
+            }
+            const arr = r?.notifications ?? r?.data;
+            if (Array.isArray(arr)) return { notifications: arr, pagination: r?.pagination || {} };
           }
         } catch (e) {
           const msg = String(e?.message || e);
@@ -581,10 +593,7 @@
           }
         }
       }
-      if (rateLimited) {
-        await alSleep(alRand(90000, 120000));
-        continue;
-      }
+      if (rateLimited) { await alSleep(alRand(90000, 120000)); continue; }
       break;
     }
     return { notifications: [], pagination: {} };
