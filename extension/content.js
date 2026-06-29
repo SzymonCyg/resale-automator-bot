@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.6";
+  const CONTENT_VERSION = "0.9.7";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -545,32 +545,44 @@
   function alExtractLikeInfo(n) {
     const entryType = n?.entry_type ?? n?.entryType ?? n?.type;
     if (entryType !== 20 && entryType !== "20") return null;
-    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject_id ?? n?.subject?.id;
-    const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.notifier?.id ?? n?.actor?.id;
-    const login = n?.notifier?.login ?? n?.user?.login ?? n?.actor?.login ?? null;
+    // Dotb: parsuj link aby wyciągnąć offering_id/user_id oraz item_id
+    let linkUserId = null, linkItemId = null;
+    if (n?.link && typeof n.link === 'string') {
+      const qs = n.link.includes('?') ? n.link.split('?')[1] : '';
+      const params = new URLSearchParams(qs);
+      linkUserId = params.get('offering_id') || params.get('user_id');
+      linkItemId = params.get('item_id') || params.get('subject_id');
+    }
+    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject_id ?? n?.subject?.id ?? linkItemId;
+    const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.notifier?.id ?? n?.actor?.id ?? linkUserId;
+    // Dotb: login = pierwsze słowo w body
+    const bodyLogin = (typeof n?.body === 'string' && n.body.trim()) ? n.body.trim().split(/\s+/)[0] : null;
+    const login = n?.notifier?.login ?? n?.user?.login ?? n?.actor?.login ?? bodyLogin ?? null;
     const updatedAt = n?.updated_at ?? n?.created_at ?? n?.time ?? null;
     if (!itemId || !userId) return null;
     return { notifId: String(n.id), itemId: String(itemId), userId: String(userId), login, updatedAt };
   }
 
   async function alFetchNotificationsPage(page) {
+    // Dotb: nowy endpoint /inbox-notifications/v1/notifications (platform:web, X-Next-App:marketplace-web), fallback /api/v2/notifications
     const tries = [
-      `/web/api/notifications/notifications?page=${page}&per_page=20`,
-      `/api/v2/notifications?page=${page}&per_page=20`,
+      { path: `/inbox-notifications/v1/notifications?page=${page}&per_page=20`, headers: { platform: "web", "X-Next-App": "marketplace-web" } },
+      { path: `/api/v2/notifications?page=${page}&per_page=20`, headers: {} },
     ];
     for (let attempt = 0; attempt < 3; attempt++) {
       let rateLimited = false;
-      for (const path of tries) {
+      for (const t of tries) {
         try {
-          const r = await vintedApi(path);
-          if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
-            await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
-            rateLimited = true;
-            break;
-          }
-          const arr = r?.notifications ?? r?.data;
-          if (Array.isArray(arr)) {
-            return { notifications: arr, pagination: r?.pagination || {} };
+          const res = await vintedRaw(t.path, { headers: t.headers });
+          if (res?.ok && res?.json) {
+            const r = res.json;
+            if (r.message_code === 'rate_limit_exceeded' || r.code === 106) {
+              await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
+              rateLimited = true;
+              break;
+            }
+            const arr = r?.notifications ?? r?.data;
+            if (Array.isArray(arr)) return { notifications: arr, pagination: r?.pagination || {} };
           }
         } catch (e) {
           const msg = String(e?.message || e);
@@ -581,10 +593,7 @@
           }
         }
       }
-      if (rateLimited) {
-        await alSleep(alRand(90000, 120000));
-        continue;
-      }
+      if (rateLimited) { await alSleep(alRand(90000, 120000)); continue; }
       break;
     }
     return { notifications: [], pagination: {} };
@@ -651,23 +660,27 @@
     });
   }
 
+  // Sygnalizuje że użytkownik zablokował/ogłoszenie niedostępne — pomijamy, nie ponawiamy (jak Dotb USER_BLOCKED_YOU)
+  class AlSkipUser extends Error {}
+
   async function alCreateConversationSafe(itemId, userId, csrfToken) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const r = await alCreateConversation(itemId, userId, csrfToken);
-        if (r && (r.message_code === 'rate_limit_exceeded' || (r.code === 106 && r.message_code !== 'access_denied'))) {
+        // 403 z kodem 106 = użytkownik Cię zablokował LUB ogłoszenie nieaktywne → POMIŃ (Dotb)
+        if (r && r.code === 106) throw new AlSkipUser('blocked_or_inactive');
+        if (r && r.message_code === 'access_denied') throw new AlSkipUser('blocked_or_inactive');
+        if (r && r.message_code === 'rate_limit_exceeded') {
           await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
         }
-        if (r && r.message_code === 'access_denied') {
-          throw new Error(`access_denied: użytkownik zablokowany lub niedostępny`);
-        }
         return r;
       } catch (e) {
+        if (e instanceof AlSkipUser) throw e;
         const msg = String(e?.message || e);
-        if (msg.includes('access_denied') || (msg.includes('403') && !msg.includes('429'))) {
-          throw e;
+        if (msg.includes('access_denied') || (msg.includes('403') && msg.includes('106'))) {
+          throw new AlSkipUser('blocked_or_inactive');
         }
         if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
           await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
@@ -677,7 +690,7 @@
         throw e;
       }
     }
-    throw new Error('Przekroczono liczbę prób');
+    throw new Error('Rate limit — przekroczono liczbę prób');
   }
 
   function alCalcDiscount(orig, amount, unit) {
@@ -789,11 +802,10 @@
         const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
         await alSleep(msgDelay);
       } catch (e) {
-        const errMsg = e.message || String(e);
-        const isAccessDenied = errMsg.includes('access_denied') || errMsg.includes('403');
-        if (isAccessDenied) {
-          await alPushStat(`⚠ pominięto @${like.login || like.userId} (brak dostępu — użytkownik zablokowany lub ogłoszenie nieaktywne)`);
+        if (e instanceof AlSkipUser) {
+          await alPushStat(`⊘ pominięto @${like.login || like.userId} — użytkownik zablokował lub ogłoszenie nieaktywne`);
         } else {
+          const errMsg = e.message || String(e);
           await alPushStat(`✗ ${like.login || like.userId}: ${errMsg}`);
         }
         alProcessedIds.add(like.notifId);
