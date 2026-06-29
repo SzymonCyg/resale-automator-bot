@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.8.6";
+  const CONTENT_VERSION = "0.8.7";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -530,7 +530,7 @@
           transform:translateX(100%); transition:transform .25s ease; display:flex; flex-direction:column;
         }
         #vm-sidebar-root.open #vm-drawer { transform:translateX(0); }
-        #vm-sidebar-root.open #vm-handle { left:0; right:auto; top:50%; transform:translateY(-50%); height:84px; width:32px; border-radius:0 8px 8px 0; box-shadow:2px 2px 8px rgba(0,0,0,.4); }
+        #vm-sidebar-root.open #vm-handle { left:0 !important; right:auto !important; top:50%; transform:translateY(-50%); height:84px; width:32px; border-radius:0 8px 8px 0; box-shadow:2px 2px 8px rgba(0,0,0,.4); }
         #vm-drawer iframe { flex:1; width:100%; border:0; background:#0f1420; }
       </style>
       <div id="vm-handle" title="Vinted Manager"><span id="vm-arrow">‹</span></div>
