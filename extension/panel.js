@@ -338,7 +338,9 @@ function renderRelistList() {
     <div class="r-item" data-i="${i}">
       <img class="r-thumb" src="${st.photos[0]?.dataUrl || ''}" alt="" />
       <div class="r-fields">
+        <div class="r-label">Tytuł</div>
         <div class="r-title-wrap"></div>
+        <div class="r-label">Opis</div>
         <div class="r-desc-wrap"></div>
         <div class="r-price">
           <label class="r-price-label">Cena</label>
