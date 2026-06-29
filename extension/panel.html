@@ -87,6 +87,22 @@
           <p class="muted" style="margin:0 0 12px">Wtyczka cyklicznie sprawdza powiadomienia o polubieniach i wysyła wiadomość użytkownikom, z którymi jeszcze nie była konwersacji. Wymaga otwartej zalogowanej karty Vinted.</p>
 
           <div class="al-row">
+            <label class="al-label">Przetwarzaj polubienia z okresu</label>
+            <div class="al-time-filter">
+              <select id="alTimeFilter">
+                <option value="0">Od teraz (tylko nowe)</option>
+                <option value="3600">Ostatnia godzina</option>
+                <option value="10800">Ostatnie 3 godziny</option>
+                <option value="43200">Ostatnie 12 godzin</option>
+                <option value="86400">Ostatnie 24 godziny</option>
+                <option value="259200">Ostatnie 3 dni</option>
+                <option value="604800">Ostatnie 7 dni</option>
+              </select>
+              <div class="muted small">Powiadomienia starsze niż wybrany czas zostaną zignorowane.</div>
+            </div>
+          </div>
+
+          <div class="al-row">
             <label class="al-label">Treść wiadomości</label>
             <textarea id="alTemplate" rows="4" placeholder="Cześć @username! ..."></textarea>
             <div class="muted small">Zmienna <code>@username</code> zostanie zastąpiona nickiem osoby, która polubiła.</div>
@@ -105,22 +121,38 @@
           </div>
 
           <div class="al-row">
-            <label class="al-label">Sprawdzanie powiadomień co (sekundy)</label>
-            <div class="al-inline">
-              <span class="muted">MIN</span>
-              <input type="number" id="alNotifMin" min="10" step="1" style="width:90px" />
-              <span class="muted">MAX</span>
-              <input type="number" id="alNotifMax" min="10" step="1" style="width:90px" />
+            <label class="al-label">Sprawdzanie powiadomień co</label>
+            <div class="al-slider-wrap">
+              <div class="al-slider-labels">
+                <span id="alNotifMinLabel">60s</span>
+                <span class="muted">–</span>
+                <span id="alNotifMaxLabel">120s</span>
+              </div>
+              <div class="al-dual-slider" id="alNotifSlider">
+                <div class="slider-track"></div>
+                <div class="slider-range" id="alNotifRange"></div>
+                <input type="range" class="slider-min" id="alNotifMin" min="60" max="600" step="20" value="60" />
+                <input type="range" class="slider-max" id="alNotifMax" min="60" max="600" step="20" value="120" />
+              </div>
+              <div class="al-slider-limits"><span>60s</span><span>600s</span></div>
             </div>
           </div>
 
           <div class="al-row">
-            <label class="al-label">Opóźnienie między wiadomościami (sekundy)</label>
-            <div class="al-inline">
-              <span class="muted">MIN</span>
-              <input type="number" id="alMsgMin" min="5" step="1" style="width:90px" />
-              <span class="muted">MAX</span>
-              <input type="number" id="alMsgMax" min="5" step="1" style="width:90px" />
+            <label class="al-label">Opóźnienie między wiadomościami</label>
+            <div class="al-slider-wrap">
+              <div class="al-slider-labels">
+                <span id="alMsgMinLabel">30s</span>
+                <span class="muted">–</span>
+                <span id="alMsgMaxLabel">60s</span>
+              </div>
+              <div class="al-dual-slider" id="alMsgSlider">
+                <div class="slider-track"></div>
+                <div class="slider-range" id="alMsgRange"></div>
+                <input type="range" class="slider-min" id="alMsgMin" min="30" max="300" step="5" value="30" />
+                <input type="range" class="slider-max" id="alMsgMax" min="30" max="300" step="5" value="60" />
+              </div>
+              <div class="al-slider-limits"><span>30s</span><span>300s</span></div>
             </div>
           </div>
 
