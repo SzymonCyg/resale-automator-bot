@@ -5,34 +5,18 @@
     <title>Vinted Manager</title>
     <style>
       :root { color-scheme: dark; }
-      body { width: 320px; margin: 0; padding: 16px; font-family: -apple-system, system-ui, sans-serif; background: #1a1f2b; color: #e6edf3; }
-      h1 { font-size: 16px; margin: 0 0 4px; }
+      body { width: 300px; margin: 0; padding: 16px; font-family: -apple-system, system-ui, sans-serif; background: #1a1f2b; color: #e6edf3; }
+      h1 { font-size: 16px; margin: 0 0 6px; }
       p { font-size: 12px; color: #98a4b3; margin: 0 0 12px; line-height: 1.45; }
-      input, button { width: 100%; padding: 9px 10px; border-radius: 6px; border: 1px solid #2d3648; background: #232a39; color: #e6edf3; font: inherit; box-sizing: border-box; }
-      button { background: #5eead4; color: #0b1220; border: none; font-weight: 600; cursor: pointer; margin-top: 8px; }
+      button { width: 100%; padding: 9px 10px; border-radius: 6px; border: none; background: #5eead4; color: #0b1220; font: inherit; font-weight: 600; cursor: pointer; margin-top: 8px; }
       button.secondary { background: transparent; color: #98a4b3; border: 1px solid #2d3648; }
-      .row { margin-bottom: 10px; }
-      .status { padding: 8px; border-radius: 6px; font-size: 12px; }
-      .ok { background: rgba(94, 234, 212, 0.15); color: #5eead4; }
-      label { font-size: 11px; color: #98a4b3; display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
     </style>
   </head>
   <body>
     <h1>Vinted Manager</h1>
-
-    <div id="signedOut">
-      <p>Zaloguj się tym samym kontem Google, którego używasz w panelu.</p>
-      <button id="signin">Zaloguj przez panel (Google)</button>
-      <div id="msg"></div>
-    </div>
-
-    <div id="signedIn" style="display: none">
-      <div class="status ok" id="signedInStatus">✓ Zalogowano</div>
-      <p style="margin-top: 12px">Otwórz Vinted i kliknij pasek po prawej stronie — panel wtyczki rozwinie się na cały ekran.</p>
-      <button id="openVinted">Otwórz Vinted</button>
-      <button class="secondary" id="signout">Wyloguj</button>
-    </div>
-
+    <p>Otwórz Vinted i kliknij pasek po prawej — panel rozwinie się na cały ekran. Logowanie odbywa się w panelu.</p>
+    <button id="openVinted">Otwórz Vinted</button>
+    <button class="secondary" id="signout">Wyloguj</button>
     <script src="popup.js"></script>
   </body>
 </html>

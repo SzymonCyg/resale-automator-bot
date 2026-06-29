@@ -1,39 +1,5 @@
-const $ = (id) => document.getElementById(id);
-const DEFAULT_PANEL_URL = "https://resale-automator-bot.lovable.app";
-
-async function refresh() {
-  const status = await chrome.runtime.sendMessage({ kind: "GET_STATUS" });
-  if (status?.signedIn) {
-    $("signedOut").style.display = "none";
-    $("signedIn").style.display = "block";
-    const who = status.user?.email ?? status.user?.id ?? "konto Google";
-    $("signedInStatus").textContent = `✓ Zalogowano jako ${who}`;
-  } else {
-    $("signedOut").style.display = "block";
-    $("signedIn").style.display = "none";
-  }
-}
-
-$("signin").addEventListener("click", async () => {
-  const panelUrl = DEFAULT_PANEL_URL.replace(/\/$/, "");
-  await chrome.storage.local.set({ panelUrl });
-  const next = `/extension-connect?extId=${encodeURIComponent(chrome.runtime.id)}`;
-  await chrome.tabs.create({ url: `${panelUrl}/auth?next=${encodeURIComponent(next)}` });
-  $("msg").innerHTML = '<div class="status ok">Otwarto panel — zaloguj się i wróć tutaj.</div>';
-  const listener = (changes) => {
-    if (changes.session) {
-      chrome.storage.onChanged.removeListener(listener);
-      refresh();
-    }
-  };
-  chrome.storage.onChanged.addListener(listener);
-});
-
-$("openVinted").addEventListener("click", () => chrome.tabs.create({ url: "https://www.vinted.pl/" }));
-
-$("signout").addEventListener("click", async () => {
+document.getElementById("openVinted").addEventListener("click", () => chrome.tabs.create({ url: "https://www.vinted.pl/" }));
+document.getElementById("signout").addEventListener("click", async () => {
   await chrome.runtime.sendMessage({ kind: "SIGN_OUT" });
-  refresh();
+  window.close();
 });
-
-refresh();
