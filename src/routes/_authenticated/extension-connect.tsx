@@ -92,6 +92,20 @@ function ConnectPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extId]);
 
+  // After successful connection, redirect back to the Vinted domain user came from.
+  const vintedUrl = (() => {
+    if (!vinted) return null;
+    const safe = vinted.replace(/[^a-z0-9.-]/gi, "").toLowerCase();
+    if (!/(^|\.)vinted\.[a-z.]+$/.test(safe)) return null;
+    return `https://${safe}`;
+  })();
+
+  useEffect(() => {
+    if (status !== "ok" || !vintedUrl) return;
+    const t = setTimeout(() => { window.location.href = vintedUrl; }, 1500);
+    return () => clearTimeout(t);
+  }, [status, vintedUrl]);
+
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <div>
@@ -114,12 +128,20 @@ function ConnectPage() {
               <p className="font-medium">Wtyczka połączona</p>
             </div>
             <p className="text-sm text-muted-foreground">
-              Zalogowano jako <strong>{user?.email ?? user?.id}</strong>. Możesz zamknąć tę
-              kartę i wrócić do popupu wtyczki.
+              Zalogowano jako <strong>{user?.email ?? user?.id}</strong>.{" "}
+              {vintedUrl
+                ? <>Przekierowujemy z powrotem do <code>{vintedUrl}</code>…</>
+                : "Możesz zamknąć tę kartę i wrócić do popupu wtyczki."}
             </p>
-            <Button variant="outline" onClick={() => window.close()}>
-              Zamknij kartę
-            </Button>
+            {vintedUrl ? (
+              <Button onClick={() => { window.location.href = vintedUrl; }}>
+                Wróć na Vinted teraz
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => window.close()}>
+                Zamknij kartę
+              </Button>
+            )}
           </div>
         )}
         {status === "err" && (
