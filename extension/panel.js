@@ -4,8 +4,9 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
 let items = [];
 let selected = new Set();
-let relistState = []; // {item, price, photos:[{dataUrl, rotation, crop}]}
+let relistState = [];
 let extensionSignedIn = false;
+let currentScreen = null;
 
 // ---------- TABS ----------
 $$(".tab").forEach((t) =>
@@ -17,33 +18,70 @@ $$(".tab").forEach((t) =>
 
 // ---------- BACKGROUND BRIDGE ----------
 function bg(kind, payload) {
-  return new Promise((resolve) =>
-    chrome.runtime.sendMessage({ kind, ...payload }, (r) => resolve(r)),
-  );
+  return new Promise((resolve) => chrome.runtime.sendMessage({ kind, ...payload }, (r) => resolve(r)));
 }
 
-async function refreshExtensionAuthUi() {
-  const status = await bg("GET_STATUS");
-  extensionSignedIn = !!status?.signedIn;
-  if (!extensionSignedIn) {
-    $("#whoami").textContent = "Zaloguj wtyczkę przez Google w popupie";
-    $("#itemsStatus").textContent = "Wtyczka niezalogowana";
-    $("#itemsBody").innerHTML = `<tr><td colspan="8" class="empty">Zaloguj wtyczkę przez Google, aby pobierać konto Vinted i wykonywać akcje.</td></tr>`;
-    ["#refreshItems", "#syncItems", "#relistBtn"].forEach((id) => { const el = $(id); if (el) el.disabled = true; });
-    return false;
+// ---------- SCREEN MANAGEMENT ----------
+function showScreen(name) {
+  currentScreen = name;
+  $("#screenLogin").classList.toggle("hidden", name !== "login");
+  $("#screenConfirm").classList.toggle("hidden", name !== "confirm");
+  $("#screenMain").classList.toggle("hidden", name !== "main");
+}
+
+const DEFAULT_PANEL_URL = "https://resale-automator-bot.lovable.app";
+
+$("#signinBtn").addEventListener("click", async () => {
+  const panelUrl = DEFAULT_PANEL_URL.replace(/\/$/, "");
+  await chrome.storage.local.set({ panelUrl });
+  const next = `/extension-connect?extId=${encodeURIComponent(chrome.runtime.id)}`;
+  await chrome.tabs.create({ url: `${panelUrl}/auth?next=${encodeURIComponent(next)}` });
+  $("#signinStatus").textContent = "Otwarto panel — zaloguj się i wróć tutaj.";
+});
+
+chrome.storage.onChanged.addListener(async (changes) => {
+  if (changes.session) {
+    const status = await bg("GET_STATUS");
+    if (status?.signedIn && currentScreen === "login") {
+      await enterConfirmThenMain(status);
+    } else if (!status?.signedIn) {
+      showScreen("login");
+    }
   }
-  ["#refreshItems", "#syncItems"].forEach((id) => { const el = $(id); if (el) el.disabled = false; });
-  updateSel();
-  return true;
+});
+
+$("#signoutBtn").addEventListener("click", async () => {
+  await bg("SIGN_OUT");
+  extensionSignedIn = false;
+  showScreen("login");
+});
+
+$("#goToPanelBtn").addEventListener("click", () => enterMain());
+
+async function enterConfirmThenMain(status) {
+  showScreen("confirm");
+  let who = status?.user?.email || "konto Google";
+  try {
+    const tab = await getVintedTab();
+    if (tab) {
+      const r = await vintedMsg(tab.id, { kind: "GET_ME_V2" });
+      if (r?.ok && r.username) who = r.username;
+    }
+  } catch {}
+  $("#confirmWho").textContent = who;
+  setTimeout(() => { if (currentScreen === "confirm") enterMain(); }, 2000);
 }
 
-async function requireExtensionLogin() {
-  if (extensionSignedIn || await refreshExtensionAuthUi()) return true;
-  throw new Error("Zaloguj wtyczkę przez Google w popupie");
+async function enterMain() {
+  showScreen("main");
+  extensionSignedIn = true;
+  await loadSettings();
+  await loadWhoami();
+  await loadItems();
 }
 
+// ---------- VINTED TAB BRIDGE ----------
 async function getVintedTab() {
-  // W trybie embedded (iframe na vinted.*) — preferuj aktywną kartę.
   const isEmbedded = window.location.search.includes("embedded=1");
   if (isEmbedded) {
     const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -64,8 +102,6 @@ function tabMsg(tabId, msg) {
 }
 
 async function ensureVintedScripts(tabId) {
-  // Vinted blokuje <script src="chrome-extension://..."> przez CSP, dlatego bridge
-  // musi być wstrzyknięty oficjalnym API Chrome do MAIN world.
   await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   await chrome.scripting.executeScript({ target: { tabId }, files: ["page-bridge.js"], world: "MAIN" });
 }
@@ -86,7 +122,6 @@ async function vintedMsg(tabId, msg) {
 
 // ---------- WHOAMI ----------
 async function loadWhoami() {
-  if (!(await refreshExtensionAuthUi())) return;
   const el = $("#whoami");
   el.textContent = "Sprawdzam sesję Vinted...";
   const tab = await getVintedTab();
@@ -99,15 +134,12 @@ async function loadWhoami() {
     el.textContent = `Brak połączenia z kartą Vinted: ${e.message}`;
   }
 }
+
 // ---------- ITEMS ----------
 async function loadItems() {
-  if (!(await refreshExtensionAuthUi())) return;
   $("#itemsStatus").textContent = "Pobieram...";
   const tab = await getVintedTab();
-  if (!tab) {
-    $("#itemsStatus").textContent = "Otwórz zalogowaną kartę vinted.*";
-    return;
-  }
+  if (!tab) { $("#itemsStatus").textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
   try {
     const r = await vintedMsg(tab.id, { kind: "FETCH_ITEMS_V2" });
     if (!r?.ok) throw new Error(r?.error || "fetch fail");
@@ -125,9 +157,7 @@ function renderItems() {
     body.innerHTML = `<tr><td colspan="8" class="empty">Brak przedmiotów.</td></tr>`;
     return;
   }
-  body.innerHTML = items
-    .map(
-      (it) => `
+  body.innerHTML = items.map((it) => `
     <tr data-id="${it.id}">
       <td><input type="checkbox" class="sel" data-id="${it.id}" ${selected.has(String(it.id)) ? "checked" : ""}/></td>
       <td>${it.photo_url ? `<img class="thumb" src="${it.photo_url}" />` : `<div class="thumb"></div>`}</td>
@@ -137,9 +167,7 @@ function renderItems() {
       <td style="text-align:right" class="muted">${it.views ?? 0}</td>
       <td style="text-align:right" class="muted">${it.favourite_count ?? 0}</td>
       <td><span class="pill">${it.status || "—"}</span></td>
-    </tr>`,
-    )
-    .join("");
+    </tr>`).join("");
   body.querySelectorAll(".sel").forEach((cb) =>
     cb.addEventListener("change", () => {
       const id = cb.dataset.id;
@@ -160,7 +188,6 @@ function escapeHtml(s) {
 
 $("#refreshItems").addEventListener("click", loadItems);
 $("#syncItems").addEventListener("click", async () => {
-  if (!(await refreshExtensionAuthUi())) return;
   $("#itemsStatus").textContent = "Synchronizuję...";
   const tab = await getVintedTab();
   if (!tab) { $("#itemsStatus").textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
@@ -184,21 +211,37 @@ $("#relistBtn").addEventListener("click", openRelist);
 $("#closeRelist").addEventListener("click", closeRelist);
 $("#cancelRelist").addEventListener("click", closeRelist);
 
-async function openRelist() {
-  try {
-    await requireExtensionLogin();
-  } catch (e) {
-    return log(`✗ ${e.message}`, "err");
+function currentMode() {
+  return document.querySelector("input[name=photoMode]:checked")?.value || "auto";
+}
+
+$$('input[name=photoMode]').forEach((r) => r.addEventListener("change", updateRelistView));
+
+function updateRelistView() {
+  const mode = currentMode();
+  const summary = $("#relistSummary");
+  const list = $("#relistList");
+  if (mode === "auto") {
+    list.classList.add("hidden");
+    summary.classList.remove("hidden");
+    summary.textContent = `${relistState.length} przedmiotów zostanie wystawionych ponownie bez zmian.`;
+  } else {
+    summary.classList.add("hidden");
+    list.classList.remove("hidden");
+    renderRelist();
   }
+}
+
+async function openRelist() {
   const chosen = items.filter((i) => selected.has(String(i.id)));
   $("#relistCount").textContent = chosen.length;
   $("#relistLog").innerHTML = "";
   $("#relistModal").classList.remove("hidden");
 
-  // Pobierz pełne dane (w tym wszystkie zdjęcia) z karty vinted
   const tab = await getVintedTab();
-  const list = $("#relistList");
-  list.innerHTML = `<p class="muted" style="padding:16px">Wczytuję zdjęcia...</p>`;
+  $("#relistSummary").textContent = "Wczytuję zdjęcia...";
+  $("#relistSummary").classList.remove("hidden");
+  $("#relistList").classList.add("hidden");
   relistState = [];
   for (const it of chosen) {
     try {
@@ -216,7 +259,7 @@ async function openRelist() {
       log(`✗ ${it.title}: ${e.message}`, "err");
     }
   }
-  renderRelist();
+  updateRelistView();
 }
 
 function closeRelist() {
@@ -225,15 +268,13 @@ function closeRelist() {
 }
 
 async function loadPhoto(url) {
-  // 1) próba bezpośrednia (extension ma host_permissions dla vinted.net)
   let dataUrl = null;
   try {
     const res = await fetch(url, { mode: "cors", credentials: "omit" });
     if (!res.ok) throw new Error("status " + res.status);
     const blob = await res.blob();
     dataUrl = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
-  } catch (e) {
-    // 2) fallback przez background (ma uprawnienia do host_permissions)
+  } catch {
     const r = await bg("FETCH_PHOTO", { url });
     if (!r?.ok) throw new Error(r?.error || "Nie mogę pobrać zdjęcia");
     dataUrl = r.dataUrl;
@@ -253,24 +294,15 @@ function renderRelist() {
     list.innerHTML = `<p class="muted" style="padding:16px">Brak przedmiotów do edycji.</p>`;
     return;
   }
-  list.innerHTML = relistState
-    .map(
-      (st, i) => `
+  list.innerHTML = relistState.map((st, i) => `
     <div class="relist-item" data-i="${i}">
       <div>
         <h3>${escapeHtml(st.item.title || "")}</h3>
-        <p class="muted">#${st.item.id} · ${st.item.brand_title || st.item.brand || ""}</p>
-        <div class="price-edit">
-          <label class="muted">Cena:</label>
-          <input type="number" step="0.01" class="price-in" value="${st.price}" />
-          <span class="muted">${st.currency || ""}</span>
-        </div>
+        <p class="muted">#${st.item.id} · ${escapeHtml(st.item.brand_title || st.item.brand || "")}</p>
       </div>
       <div>
         <div class="photos">
-          ${st.photos
-            .map(
-              (_, j) => `
+          ${st.photos.map((_, j) => `
             <div class="photo-edit" data-j="${j}">
               <canvas width="240" height="240"></canvas>
               <div class="actions">
@@ -278,30 +310,32 @@ function renderRelist() {
                 <button data-act="rot1">+1°</button>
                 <button data-act="rotN1">-1°</button>
                 <button data-act="rotR">⟳</button>
-                <button data-act="reset">×</button>
+                <button data-act="reset">↺</button>
+                <button data-act="del" title="Usuń zdjęcie">×</button>
               </div>
-            </div>`,
-            )
-            .join("")}
+            </div>`).join("")}
         </div>
       </div>
-    </div>`,
-    )
-    .join("");
+    </div>`).join("");
 
-  // Bind canvas + actions
   $$(".relist-item").forEach((row) => {
     const i = Number(row.dataset.i);
-    row.querySelector(".price-in").addEventListener("input", (e) => {
-      relistState[i].price = Number(e.target.value) || 0;
-    });
     row.querySelectorAll(".photo-edit").forEach((pe) => {
       const j = Number(pe.dataset.j);
       drawPhoto(i, j);
       pe.querySelectorAll("button").forEach((b) =>
         b.addEventListener("click", () => {
-          const p = relistState[i].photos[j];
           const a = b.dataset.act;
+          if (a === "del") {
+            if (relistState[i].photos.length <= 1) {
+              alert("Przedmiot musi mieć co najmniej 1 zdjęcie.");
+              return;
+            }
+            relistState[i].photos.splice(j, 1);
+            renderRelist();
+            return;
+          }
+          const p = relistState[i].photos[j];
           if (a === "rotL") p.rotation -= 90;
           else if (a === "rotR") p.rotation += 90;
           else if (a === "rot1") p.rotation += 1;
@@ -333,26 +367,9 @@ function drawPhoto(i, j) {
   img.src = p.dataUrl;
 }
 
-// Bulk price (procent)
-$("#applyBulkPrice").addEventListener("click", () => {
-  const pct = Number($("#bulkPricePct").value);
-  if (!Number.isFinite(pct) || pct === 0) return;
-  relistState.forEach((st) => {
-    st.price = Math.max(0, +(st.price * (1 + pct / 100)).toFixed(2));
-  });
-  renderRelist();
-});
-
-// Eksport zedytowanego zdjęcia → blob
 async function exportPhoto(p, mode) {
-  let rotation = p.rotation;
-  if (mode === "auto" && rotation === 0) rotation = Math.random() < 0.5 ? 1 : -1;
-  if (mode === "none") rotation = 0;
-  const img = await new Promise((r) => {
-    const i = new Image();
-    i.onload = () => r(i);
-    i.src = p.dataUrl;
-  });
+  let rotation = mode === "manual" ? p.rotation : 0;
+  const img = await new Promise((r) => { const i = new Image(); i.onload = () => r(i); i.src = p.dataUrl; });
   const rad = (rotation * Math.PI) / 180;
   const sin = Math.abs(Math.sin(rad)), cos = Math.abs(Math.cos(rad));
   const w = img.width, h = img.height;
@@ -368,9 +385,8 @@ async function exportPhoto(p, mode) {
   return await c.convertToBlob({ type: "image/jpeg", quality: 0.92 });
 }
 
-// RUN
 $("#runRelist").addEventListener("click", async () => {
-  const mode = document.querySelector("input[name=photoMode]:checked").value;
+  const mode = currentMode();
   const tab = await getVintedTab();
   if (!tab) return log("✗ Brak otwartej karty Vinted", "err");
   $("#runRelist").disabled = true;
@@ -380,18 +396,12 @@ $("#runRelist").addEventListener("click", async () => {
       const photos = [];
       for (const p of st.photos) {
         const blob = await exportPhoto(p, mode);
-        const dataUrl = await new Promise((r) => {
-          const fr = new FileReader();
-          fr.onload = () => r(fr.result);
-          fr.readAsDataURL(blob);
-        });
+        const dataUrl = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
         photos.push(dataUrl);
       }
-      // Pobierz pełny payload edytowalny dla starego ogłoszenia (status_id, brand_id itd.)
       const detail = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL_V2", id: st.item.id });
       if (!detail?.ok) throw new Error(detail?.error || "Nie mogę pobrać szczegółów starego ogłoszenia");
       const original = { ...detail.item, id: st.item.id, currency: st.currency };
-      // Bezpośredni flow API (photos → drafts → completion) — bez otwierania nowej karty.
       const r = await vintedMsg(tab.id, {
         kind: "RELIST_ITEM_V2",
         original,
@@ -400,9 +410,7 @@ $("#runRelist").addEventListener("click", async () => {
         photos,
       });
       if (r?.ok) {
-        const delMsg = r.deletedOld
-          ? ", stare usunięte"
-          : `, ⚠ usunięcie starego: ${r.deleteError || "fail"}`;
+        const delMsg = r.deletedOld ? ", stare usunięte" : `, ⚠ usunięcie starego: ${r.deleteError || "fail"}`;
         log(`✓ ${st.item.title} — nowy ID ${r.newId}${delMsg}`, "ok");
       } else {
         log(`✗ ${st.item.title}: ${r?.error || "fail"}`, "err");
@@ -426,7 +434,6 @@ function log(s, cls = "") {
 
 // ---------- SETTINGS ----------
 let rules = [];
-
 async function loadSettings() {
   const { settings } = await chrome.storage.local.get(["settings"]);
   const s = settings || {};
@@ -477,20 +484,19 @@ $("#addRule").addEventListener("click", () => {
   renderRules();
 });
 $("#saveSettings").addEventListener("click", async () => {
-  const settings = {
-    replies: rules.filter((r) => r.pattern && r.response),
-  };
+  const settings = { replies: rules.filter((r) => r.pattern && r.response) };
   await bg("SAVE_SETTINGS", { settings });
   $("#saveStatus").textContent = "✓ Zapisano";
   setTimeout(() => ($("#saveStatus").textContent = ""), 2000);
 });
 
+// ---------- BOOT ----------
 async function boot() {
-  await loadSettings();
-  if (await refreshExtensionAuthUi()) {
-    await loadWhoami();
-    await loadItems();
+  const status = await bg("GET_STATUS");
+  if (status?.signedIn) {
+    await enterMain();
+  } else {
+    showScreen("login");
   }
 }
-
 boot();
