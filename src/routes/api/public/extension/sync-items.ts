@@ -115,6 +115,21 @@ export const Route = createFileRoute("/api/public/extension/sync-items")({
           }
         }
 
+        // Usuń przedmioty których już nie ma na koncie Vinted
+        const incomingIds = parsed.data.items.map((it) => it.vinted_item_id);
+        let delQuery = supabaseAdmin
+          .from("vinted_items")
+          .delete()
+          .eq("account_id", accountId!);
+        if (incomingIds.length > 0) {
+          delQuery = delQuery.not(
+            "vinted_item_id",
+            "in",
+            `(${incomingIds.map((id) => `"${id.replace(/"/g, '\\"')}"`).join(",")})`,
+          );
+        }
+        await delQuery;
+
         return new Response(
           JSON.stringify({ ok: true, accountId, count: rows.length }),
           { status: 200, headers: corsHeaders() },
