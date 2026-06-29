@@ -133,15 +133,19 @@ function ConnectPage() {
                 ? <>Przekierowujemy z powrotem do <code>{vintedUrl}</code>…</>
                 : "Możesz zamknąć tę kartę i wrócić do popupu wtyczki."}
             </p>
-            {vintedUrl ? (
-              <Button onClick={() => { window.location.href = vintedUrl; }}>
-                Wróć na Vinted teraz
-              </Button>
-            ) : (
-              <Button variant="outline" onClick={() => window.close()}>
-                Zamknij kartę
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (vintedUrl) {
+                  window.location.href = vintedUrl;
+                } else {
+                  window.close();
+                  setTimeout(() => { window.location.href = "https://www.vinted.pl"; }, 300);
+                }
+              }}
+            >
+              Wróć na Vinted
+            </Button>
           </div>
         )}
         {status === "err" && (
