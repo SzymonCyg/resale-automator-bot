@@ -789,7 +789,13 @@
         const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
         await alSleep(msgDelay);
       } catch (e) {
-        await alPushStat(`✗ ${like.login || like.userId}: ${e.message}`);
+        const errMsg = e.message || String(e);
+        const isAccessDenied = errMsg.includes('access_denied') || errMsg.includes('403');
+        if (isAccessDenied) {
+          await alPushStat(`⚠ pominięto @${like.login || like.userId} (brak dostępu — użytkownik zablokowany lub ogłoszenie nieaktywne)`);
+        } else {
+          await alPushStat(`✗ ${like.login || like.userId}: ${errMsg}`);
+        }
         alProcessedIds.add(like.notifId);
       }
     }
