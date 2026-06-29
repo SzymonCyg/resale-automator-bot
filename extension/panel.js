@@ -34,7 +34,9 @@ const DEFAULT_PANEL_URL = "https://resale-automator-bot.lovable.app";
 $("#signinBtn").addEventListener("click", async () => {
   const panelUrl = DEFAULT_PANEL_URL.replace(/\/$/, "");
   await chrome.storage.local.set({ panelUrl });
-  const next = `/extension-connect?extId=${encodeURIComponent(chrome.runtime.id)}`;
+  let vintedHost = "";
+  try { vintedHost = document.referrer ? new URL(document.referrer).hostname : ""; } catch {}
+  const next = `/extension-connect?extId=${encodeURIComponent(chrome.runtime.id)}${vintedHost ? `&vinted=${encodeURIComponent(vintedHost)}` : ""}`;
   await chrome.tabs.create({ url: `${panelUrl}/auth?next=${encodeURIComponent(next)}` });
   $("#signinStatus").textContent = "Otwarto panel — zaloguj się i wróć tutaj.";
 });
