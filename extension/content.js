@@ -558,14 +558,34 @@
       `/web/api/notifications/notifications?page=${page}&per_page=20`,
       `/api/v2/notifications?page=${page}&per_page=20`,
     ];
-    for (const path of tries) {
-      try {
-        const r = await vintedApi(path);
-        const arr = r?.notifications ?? r?.data;
-        if (Array.isArray(arr)) {
-          return { notifications: arr, pagination: r?.pagination || {} };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let rateLimited = false;
+      for (const path of tries) {
+        try {
+          const r = await vintedApi(path);
+          if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
+            await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
+            rateLimited = true;
+            break;
+          }
+          const arr = r?.notifications ?? r?.data;
+          if (Array.isArray(arr)) {
+            return { notifications: arr, pagination: r?.pagination || {} };
+          }
+        } catch (e) {
+          const msg = String(e?.message || e);
+          if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+            await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
+            rateLimited = true;
+            break;
+          }
         }
-      } catch {}
+      }
+      if (rateLimited) {
+        await alSleep(alRand(90000, 120000));
+        continue;
+      }
+      break;
     }
     return { notifications: [], pagination: {} };
   }
