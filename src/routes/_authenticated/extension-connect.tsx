@@ -7,14 +7,17 @@ import { CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/extension-connect")({
   head: () => ({ meta: [{ title: "Łączenie z wtyczką — Vinted Manager" }] }),
-  validateSearch: z.object({ extId: z.string().min(10).max(64) }),
+  validateSearch: z.object({
+    extId: z.string().min(10).max(64),
+    vinted: z.string().optional(),
+  }),
   component: ConnectPage,
 });
 
 type Status = "idle" | "sending" | "ok" | "err";
 
 function ConnectPage() {
-  const { extId } = useSearch({ from: "/_authenticated/extension-connect" });
+  const { extId, vinted } = useSearch({ from: "/_authenticated/extension-connect" });
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<{ email?: string | null; id: string } | null>(null);
