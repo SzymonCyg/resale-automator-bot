@@ -82,9 +82,70 @@
         </div>
       </section>
 
-      <section class="view hidden" data-view="messages">
-        <p class="muted">Reguły automatycznych odpowiedzi konfigurujesz w zakładce Ustawienia. Sprawdzane są co 5 min na otwartej karcie Vinted.</p>
+      <section class="view hidden" data-view="likes">
+        <div class="card">
+          <h2>💬 Auto-odpowiedzi na polubienia</h2>
+          <p class="muted" style="margin:0 0 12px">Wtyczka cyklicznie sprawdza powiadomienia o polubieniach i wysyła wiadomość użytkownikom, z którymi jeszcze nie była konwersacji. Wymaga otwartej zalogowanej karty Vinted.</p>
+
+          <div class="al-row">
+            <label class="al-label">Treść wiadomości</label>
+            <textarea id="alTemplate" rows="4" placeholder="Cześć @username! ..."></textarea>
+            <div class="muted small">Zmienna <code>@username</code> zostanie zastąpiona nickiem osoby, która polubiła.</div>
+          </div>
+
+          <div class="al-row">
+            <label class="al-toggle"><input type="checkbox" id="alDiscount" /> Zaproponuj obniżkę ceny (oferta przez Vinted)</label>
+            <div class="al-inline">
+              <span class="muted">Obniżka o</span>
+              <input type="number" id="alDiscountAmount" min="1" step="1" style="width:90px" />
+              <select id="alDiscountUnit">
+                <option value="%">%</option>
+                <option value="abs">waluty (np. zł/€)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="al-row">
+            <label class="al-label">Sprawdzanie powiadomień co (sekundy)</label>
+            <div class="al-inline">
+              <span class="muted">MIN</span>
+              <input type="number" id="alNotifMin" min="10" step="1" style="width:90px" />
+              <span class="muted">MAX</span>
+              <input type="number" id="alNotifMax" min="10" step="1" style="width:90px" />
+            </div>
+          </div>
+
+          <div class="al-row">
+            <label class="al-label">Opóźnienie między wiadomościami (sekundy)</label>
+            <div class="al-inline">
+              <span class="muted">MIN</span>
+              <input type="number" id="alMsgMin" min="5" step="1" style="width:90px" />
+              <span class="muted">MAX</span>
+              <input type="number" id="alMsgMax" min="5" step="1" style="width:90px" />
+            </div>
+          </div>
+
+          <div class="al-row al-actions">
+            <button id="alStartBtn" class="btn primary">▶ Start</button>
+            <button id="alStopBtn" class="btn">■ Stop</button>
+            <button id="alSaveBtn" class="btn ghost">Zapisz ustawienia</button>
+            <span id="alSaveStatus" class="muted"></span>
+          </div>
+
+          <div class="al-status">
+            <div><b>Status:</b> <span id="alRunStatus">zatrzymane</span></div>
+            <div><b>Wysłano wiadomości:</b> <span id="alSentCount">0</span></div>
+            <div><b>Ostatnie zdarzenie:</b> <span id="alLastEvent">—</span></div>
+          </div>
+          <div id="alLog" class="log"></div>
+        </div>
       </section>
+
+      <section class="view hidden" data-view="messages">
+        <p class="muted">Reguły automatycznych odpowiedzi (dopasowane do treści wiadomości) konfigurujesz w zakładce Ustawienia. Sprawdzane są co 5 min na otwartej karcie Vinted.</p>
+      </section>
+
+
 
       <section class="view hidden" data-view="settings">
         <div class="card">
