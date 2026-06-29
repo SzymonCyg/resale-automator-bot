@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Vinted Manager Helper",
-  "version": "0.9.7",
-  "description": "Panel do zarządzania kontami Vinted: podgląd przedmiotów, ponowne wystawianie z edycją zdjęć i cen, auto-odpowiedzi.",
-  "permissions": ["storage", "alarms", "activeTab", "tabs", "scripting"],
+  "version": "0.9.8",
+  "description": "Panel do zarz\u0105dzania kontami Vinted: podgl\u0105d przedmiot\u00f3w, ponowne wystawianie z edycj\u0105 zdj\u0119\u0107 i cen, auto-odpowiedzi.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "activeTab",
+    "tabs",
+    "scripting"
+  ],
   "host_permissions": [
     "https://*.vinted.pl/*",
     "https://*.vinted.fr/*",
@@ -18,7 +24,18 @@
     "https://*.vinted.com/*",
     "https://*.lovable.app/*",
     "https://*.lovable.dev/*",
-    "https://*.supabase.co/*"
+    "https://*.supabase.co/*",
+    "https://api.vinted.pl/*",
+    "https://api.vinted.fr/*",
+    "https://api.vinted.de/*",
+    "https://api.vinted.es/*",
+    "https://api.vinted.it/*",
+    "https://api.vinted.nl/*",
+    "https://api.vinted.cz/*",
+    "https://api.vinted.sk/*",
+    "https://api.vinted.co.uk/*",
+    "https://api.vinted.com/*",
+    "https://api.vinted.net/*"
   ],
   "externally_connectable": {
     "matches": [
@@ -27,9 +44,17 @@
       "http://localhost/*"
     ]
   },
-  "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "Vinted Manager" },
-  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Vinted Manager"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "content_scripts": [
     {
       "matches": [
@@ -43,7 +68,9 @@
         "https://*.vinted.sk/*",
         "https://*.vinted.co.uk/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -58,18 +85,32 @@
         "https://*.vinted.sk/items/new*",
         "https://*.vinted.co.uk/items/new*"
       ],
-      "js": ["react-form-bridge.js"],
+      "js": [
+        "react-form-bridge.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["panel.html", "panel.css", "panel.js", "page-bridge.js", "react-form-bridge.js"],
+      "resources": [
+        "panel.html",
+        "panel.css",
+        "panel.js",
+        "page-bridge.js",
+        "react-form-bridge.js"
+      ],
       "matches": [
-        "https://*.vinted.pl/*", "https://*.vinted.fr/*", "https://*.vinted.de/*",
-        "https://*.vinted.es/*", "https://*.vinted.it/*", "https://*.vinted.nl/*",
-        "https://*.vinted.cz/*", "https://*.vinted.sk/*", "https://*.vinted.co.uk/*"
+        "https://*.vinted.pl/*",
+        "https://*.vinted.fr/*",
+        "https://*.vinted.de/*",
+        "https://*.vinted.es/*",
+        "https://*.vinted.it/*",
+        "https://*.vinted.nl/*",
+        "https://*.vinted.cz/*",
+        "https://*.vinted.sk/*",
+        "https://*.vinted.co.uk/*"
       ]
     }
   ]
