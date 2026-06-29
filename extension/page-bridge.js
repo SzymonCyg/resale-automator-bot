@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "0.7.4";
+  const BRIDGE_VERSION = "0.9.8";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -116,11 +116,17 @@
       if (!init.skipXRequestedWith && !headers.has("X-Requested-With")) headers.set("X-Requested-With", "XMLHttpRequest");
       if (!headers.has("Locale")) headers.set("Locale", locale);
 
+      let fetchMode = "same-origin";
+      try {
+        const urlOrigin = new URL(url).origin;
+        if (urlOrigin !== window.location.origin) fetchMode = "cors";
+      } catch {}
+
       const response = await fetch(url, {
         ...init,
         headers,
         credentials: "include",
-        mode: "same-origin",
+        mode: fetchMode,
         cache: init.cache || "no-store",
         referrer: init.referrer,
       });
