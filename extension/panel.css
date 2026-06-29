@@ -64,3 +64,15 @@ textarea { min-height:60px; width:100%; resize:vertical; }
 
 .rule { background:var(--s2); border:1px solid var(--b); border-radius:8px; padding:10px; margin-bottom:8px; }
 .rule .row { display:grid; grid-template-columns:140px 1fr auto; gap:8px; }
+
+/* Auth screens */
+.auth-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:var(--bg); z-index:30; }
+.auth-card { background:var(--s1); border:1px solid var(--b); border-radius:14px; padding:36px 32px; max-width:380px; width:90%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.4); }
+.auth-card h1 { font-size:22px; margin:14px 0 8px; }
+.auth-card p { margin:0 0 18px; }
+.auth-card .btn { width:100%; padding:11px; font-size:14px; }
+.auth-card .small { margin-top:12px; font-size:11px; }
+.logo-big { width:56px; height:56px; font-size:24px; border-radius:12px; margin:0 auto; }
+.check-ok { width:72px; height:72px; border-radius:50%; background:var(--p); color:#0b1220; font-size:42px; font-weight:700; display:grid; place-items:center; margin:0 auto 8px; }
+.relist-summary { padding:24px 20px; color:var(--m); text-align:center; font-size:15px; }
+
