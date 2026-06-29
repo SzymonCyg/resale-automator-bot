@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.1";
+  const CONTENT_VERSION = "0.9.6";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -574,7 +574,7 @@
           }
         } catch (e) {
           const msg = String(e?.message || e);
-          if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+          if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
             await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
             rateLimited = true;
             break;
@@ -655,15 +655,21 @@
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const r = await alCreateConversation(itemId, userId, csrfToken);
-        if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
+        if (r && (r.message_code === 'rate_limit_exceeded' || (r.code === 106 && r.message_code !== 'access_denied'))) {
           await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
         }
+        if (r && r.message_code === 'access_denied') {
+          throw new Error(`access_denied: użytkownik zablokowany lub niedostępny`);
+        }
         return r;
       } catch (e) {
         const msg = String(e?.message || e);
-        if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+        if (msg.includes('access_denied') || (msg.includes('403') && !msg.includes('429'))) {
+          throw e;
+        }
+        if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
           await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
@@ -671,7 +677,7 @@
         throw e;
       }
     }
-    throw new Error('Rate limit — przekroczono liczbę prób');
+    throw new Error('Przekroczono liczbę prób');
   }
 
   function alCalcDiscount(orig, amount, unit) {
@@ -695,15 +701,21 @@
           csrfToken,
           body: JSON.stringify({ reply: { body } }),
         });
-        if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
+        if (r && (r.message_code === 'rate_limit_exceeded' || (r.code === 106 && r.message_code !== 'access_denied'))) {
           await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
         }
+        if (r && r.message_code === 'access_denied') {
+          throw new Error(`access_denied: brak dostępu do konwersacji`);
+        }
         return r;
       } catch (e) {
         const msg = String(e?.message || e);
-        if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+        if (msg.includes('access_denied') || (msg.includes('403') && !msg.includes('429'))) {
+          throw e;
+        }
+        if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
           await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
@@ -711,7 +723,7 @@
         throw e;
       }
     }
-    throw new Error('Rate limit — przekroczono liczbę prób');
+    throw new Error('Przekroczono liczbę prób');
   }
 
   let alRunning = false;
@@ -777,7 +789,13 @@
         const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
         await alSleep(msgDelay);
       } catch (e) {
-        await alPushStat(`✗ ${like.login || like.userId}: ${e.message}`);
+        const errMsg = e.message || String(e);
+        const isAccessDenied = errMsg.includes('access_denied') || errMsg.includes('403');
+        if (isAccessDenied) {
+          await alPushStat(`⚠ pominięto @${like.login || like.userId} (brak dostępu — użytkownik zablokowany lub ogłoszenie nieaktywne)`);
+        } else {
+          await alPushStat(`✗ ${like.login || like.userId}: ${errMsg}`);
+        }
         alProcessedIds.add(like.notifId);
       }
     }
