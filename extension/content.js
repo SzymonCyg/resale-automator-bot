@@ -574,7 +574,7 @@
           }
         } catch (e) {
           const msg = String(e?.message || e);
-          if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+          if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
             await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
             rateLimited = true;
             break;
