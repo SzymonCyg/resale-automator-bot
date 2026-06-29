@@ -492,7 +492,15 @@
         else if (msg.kind === "RUN_REPLIES" || msg.kind === "RUN_REPLIES_V2") { await runReplies(); sendResponse({ ok: true }); }
         else if (msg.kind === "SYNC_NOW" || msg.kind === "SYNC_NOW_V2") sendResponse({ ok: true, ...(await syncToPanel()) });
         else if (msg.kind === "DELETE_ITEM_V2") sendResponse({ ok: true, ...(await deleteItemById(msg.id)) });
-        else if (msg.kind === "AUTOLIKES_KICK") { alStartLoop(); sendResponse({ ok: true }); }
+        else if (msg.kind === "AUTOLIKES_KICK") {
+          if (alKick) { try { alKick(); } catch {} alKick = null; }
+          alProcessedIds = new Set();
+          alLatestId = null;
+          alLatestDate = null;
+          alMode = 'idle';
+          alStartLoop();
+          sendResponse({ ok: true });
+        }
 
       } catch (e) {
         sendResponse({ ok: false, error: e.message });
@@ -512,13 +520,14 @@
     autoLikesDelayNotifMax: 120000,
     autoLikesMsgDelayMin: 30000,
     autoLikesMsgDelayMax: 60000,
+    autoLikesTimeFilter: 0,
   };
 
   function alRand(min, max) { return Math.floor(min + Math.random() * Math.max(1, max - min)); }
   function alSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   async function alGetSettings() {
-    const s = await chrome.storage.local.get(Object.keys(AL_DEFAULTS).concat(["processedLikeNotifications", "autoLikesStats"]));
+    const s = await chrome.storage.local.get(Object.keys(AL_DEFAULTS).concat(["autoLikesStats"]));
     return { ...AL_DEFAULTS, ...s };
   }
 
@@ -533,29 +542,81 @@
     await chrome.storage.local.set({ autoLikesStats: next });
   }
 
-  async function alFetchNotifications() {
+  function alExtractLikeInfo(n) {
+    const entryType = n?.entry_type ?? n?.entryType ?? n?.type;
+    if (entryType !== 20 && entryType !== "20") return null;
+    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject_id ?? n?.subject?.id;
+    const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.notifier?.id ?? n?.actor?.id;
+    const login = n?.notifier?.login ?? n?.user?.login ?? n?.actor?.login ?? null;
+    const updatedAt = n?.updated_at ?? n?.created_at ?? n?.time ?? null;
+    if (!itemId || !userId) return null;
+    return { notifId: String(n.id), itemId: String(itemId), userId: String(userId), login, updatedAt };
+  }
+
+  async function alFetchNotificationsPage(page) {
     const tries = [
-      `/web/api/notifications/notifications?page=1&per_page=20`,
-      `/api/v2/notifications?page=1&per_page=20`,
+      `/web/api/notifications/notifications?page=${page}&per_page=20`,
+      `/api/v2/notifications?page=${page}&per_page=20`,
     ];
     for (const path of tries) {
       try {
         const r = await vintedApi(path);
-        const arr = r?.notifications ?? r?.data ?? r;
-        if (Array.isArray(arr)) return arr;
+        const arr = r?.notifications ?? r?.data;
+        if (Array.isArray(arr)) {
+          return { notifications: arr, pagination: r?.pagination || {} };
+        }
       } catch {}
     }
-    return [];
+    return { notifications: [], pagination: {} };
   }
 
-  function alExtractLikeInfo(n) {
-    // entry_type === 20 = polubienie
-    const entryType = n?.entry_type ?? n?.entryType ?? n?.type;
-    if (entryType !== 20 && entryType !== "20" && entryType !== "item_favourite" && entryType !== "favourite") return null;
-    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject?.id;
-    const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.actor?.id;
-    if (!itemId || !userId) return null;
-    return { notifId: String(n.id), itemId: String(itemId), userId: String(userId) };
+  let alProcessedIds = new Set();
+  let alLatestId = null;
+  let alLatestDate = null;
+  let alMode = 'idle';
+
+  async function alGetNotifications(settings) {
+    const timeFilterSec = settings.autoLikesTimeFilter || 0;
+    const maxAgeMs = timeFilterSec * 1000;
+    const cutoffDate = maxAgeMs > 0 ? new Date(Date.now() - maxAgeMs) : null;
+    const isBacklog = maxAgeMs > 0 && alMode === 'backlog';
+
+    let page = 1;
+    const collected = [];
+    let stop = false;
+
+    while (!stop) {
+      const { notifications, pagination } = await alFetchNotificationsPage(page);
+      if (!notifications.length) break;
+
+      for (const notif of notifications) {
+        const like = alExtractLikeInfo(notif);
+        if (!like) continue;
+        const updatedAt = like.updatedAt ? new Date(like.updatedAt) : null;
+
+        if (isBacklog) {
+          if (updatedAt && cutoffDate && updatedAt < cutoffDate) { stop = true; break; }
+          if (alProcessedIds.has(like.notifId)) continue;
+          collected.push(like);
+        } else {
+          if (alLatestDate && updatedAt && updatedAt <= alLatestDate) { stop = true; break; }
+          if (alLatestId && like.notifId === alLatestId) { stop = true; break; }
+          if (alProcessedIds.has(like.notifId)) continue;
+          collected.push(like);
+          if (!isBacklog && !cutoffDate) {
+            // Live (no time filter): only first page newest items
+          }
+        }
+      }
+
+      if (stop) break;
+      if (!isBacklog) break; // live: tylko 1 strona
+      if (pagination.total_pages && page >= pagination.total_pages) break;
+      page++;
+      await alSleep(alRand(300, 600));
+    }
+
+    return collected;
   }
 
   async function alCreateConversation(itemId, oppositeUserId, csrfToken) {
@@ -597,14 +658,14 @@
   async function alLoopOnce() {
     const s = await alGetSettings();
     if (!s.autoLikesEnabled) return false;
-    const processed = new Set(s.processedLikeNotifications || []);
     const csrfToken = readCsrfToken();
-    let notifs;
-    try { notifs = await alFetchNotifications(); }
+
+    let likes = [];
+    try { likes = await alGetNotifications(s); }
     catch (e) { await alPushStat(`✗ powiadomienia: ${e.message}`); return true; }
 
-    const likes = notifs.map(alExtractLikeInfo).filter(Boolean).filter(x => !processed.has(x.notifId));
-    if (!likes.length) { await alPushStat(`brak nowych polubień`); return true; }
+    if (!likes.length) { await alPushStat(`brak nowych polubień`); }
+    else { await alPushStat(`📩 Znaleziono ${likes.length} polubień`); }
 
     for (const like of likes) {
       const cur = await alGetSettings();
@@ -612,51 +673,55 @@
       try {
         const convRes = await alCreateConversation(like.itemId, like.userId, csrfToken);
         const conv = convRes?.conversation || convRes?.thread || convRes;
+        const oppLogin = conv?.opposite_user?.login || conv?.opposite_user?.username || like.login || String(like.userId);
         const msgs = conv?.messages || [];
         if (msgs.length > 0) {
-          processed.add(like.notifId);
-          await alPushStat(`pominięto @${conv?.opposite_user?.login || like.userId} (już była konwersacja)`);
-          continue;
-        }
-        const oppLogin = conv?.opposite_user?.login || conv?.opposite_user?.username || String(like.userId);
-        // opcjonalnie oferta cenowa
-        if (cur.autoLikesDiscount) {
-          const txId = conv?.transaction?.id || conv?.transaction_id;
-          const origPrice = Number(conv?.transaction?.item_price?.amount
-            ?? conv?.transaction?.offer_price?.amount
-            ?? conv?.item?.price?.amount
-            ?? conv?.item?.price
-            ?? 0);
-          const curCode = conv?.transaction?.currency_code
-            || conv?.item?.price?.currency_code
-            || conv?.item?.currency
-            || "PLN";
-          if (txId && origPrice > 0) {
-            const newP = alCalcDiscount(origPrice, cur.autoLikesDiscountAmount, cur.autoLikesDiscountUnit);
-            try {
-              await alSendOffer(txId, newP, curCode, csrfToken);
-              await alPushStat(`💸 oferta ${newP} ${curCode} → @${oppLogin}`);
-            } catch (e) {
-              await alPushStat(`⚠ oferta @${oppLogin}: ${e.message}`);
+          alProcessedIds.add(like.notifId);
+          await alPushStat(`⚠ pominięto @${oppLogin} (już była konwersacja)`);
+        } else {
+          if (cur.autoLikesDiscount) {
+            const txId = conv?.transaction?.id || conv?.transaction_id;
+            const origPrice = Number(conv?.transaction?.item_price?.amount
+              ?? conv?.transaction?.offer_price?.amount
+              ?? conv?.item?.price?.amount
+              ?? conv?.item?.price
+              ?? 0);
+            const curCode = conv?.transaction?.currency_code
+              || conv?.item?.price?.currency_code
+              || conv?.item?.currency
+              || "PLN";
+            if (txId && origPrice > 0) {
+              const newP = alCalcDiscount(origPrice, cur.autoLikesDiscountAmount, cur.autoLikesDiscountUnit);
+              try {
+                await alSendOffer(txId, newP, curCode, csrfToken);
+                await alPushStat(`💸 oferta ${newP} ${curCode} → @${oppLogin}`);
+              } catch (e) {
+                await alPushStat(`⚠ oferta @${oppLogin}: ${e.message}`);
+              }
             }
           }
+          const convId = conv?.id || conv?.conversation_id;
+          const body = (cur.autoLikesTemplate || "").replace(/@username/g, oppLogin);
+          if (convId && body) {
+            await alSendReply(convId, body, csrfToken);
+            alProcessedIds.add(like.notifId);
+            await alPushStat(`✓ wiadomość → @${oppLogin}`, 1);
+          }
         }
-        // wiadomość
-        const convId = conv?.id || conv?.conversation_id;
-        const body = (cur.autoLikesTemplate || "").replace(/@username/g, oppLogin);
-        if (convId && body) {
-          await alSendReply(convId, body, csrfToken);
-          processed.add(like.notifId);
-          await alPushStat(`✓ wiadomość → @${oppLogin}`, 1);
+        if (!alLatestId || Number(like.notifId) > Number(alLatestId)) {
+          alLatestId = like.notifId;
+          if (like.updatedAt) alLatestDate = new Date(like.updatedAt);
         }
-        // zapisz na bieżąco aby nie powtarzać przy crashu
-        await chrome.storage.local.set({ processedLikeNotifications: [...processed].slice(-2000) });
         await alSleep(alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
       } catch (e) {
-        await alPushStat(`✗ ${like.userId}: ${e.message}`);
-        processed.add(like.notifId);
-        await chrome.storage.local.set({ processedLikeNotifications: [...processed].slice(-2000) });
+        await alPushStat(`✗ ${like.login || like.userId}: ${e.message}`);
+        alProcessedIds.add(like.notifId);
       }
+    }
+
+    if (alMode === 'backlog') {
+      alMode = 'live';
+      await alPushStat(`✅ Historia przetworzona — tryb live`);
     }
     return true;
   }
@@ -664,16 +729,15 @@
   async function alStartLoop() {
     if (alRunning) return;
     alRunning = true;
+    const s0 = await alGetSettings();
+    alMode = (s0.autoLikesTimeFilter || 0) > 0 ? 'backlog' : 'live';
+    await alPushStat(`🔍 Tryb: ${alMode === 'backlog' ? `historyczne (${s0.autoLikesTimeFilter}s wstecz)` : 'tylko nowe'}`);
     while (true) {
       const s = await alGetSettings();
-      if (!s.autoLikesEnabled) { alRunning = false; return; }
+      if (!s.autoLikesEnabled) { alRunning = false; alMode = 'idle'; return; }
       try { await alLoopOnce(); } catch (e) { console.warn("[AL]", e); }
-      // czekaj losowo MIN-MAX, ale reaguj na kick
       const wait = alRand(s.autoLikesDelayNotifMin, s.autoLikesDelayNotifMax);
-      await new Promise(r => {
-        alKick = r;
-        setTimeout(r, wait);
-      });
+      await new Promise(r => { alKick = r; setTimeout(r, wait); });
       alKick = null;
     }
   }
@@ -694,6 +758,7 @@
       alGetSettings().then((s) => { if (s.autoLikesEnabled) alStartLoop(); });
     })
     .catch(() => {});
+
 
 
   function injectSidebar() {
