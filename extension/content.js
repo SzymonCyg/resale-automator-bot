@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.7";
+  const CONTENT_VERSION = "0.9.8";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -563,10 +563,16 @@
     return { notifId: String(n.id), itemId: String(itemId), userId: String(userId), login, updatedAt };
   }
 
+  function alApiHostUrl(path) {
+    const proto = window.location.protocol;
+    const hostNoWww = window.location.hostname.replace(/^www\./, "");
+    return `${proto}//api.${hostNoWww}${path}`;
+  }
+
   async function alFetchNotificationsPage(page) {
-    // Dotb: nowy endpoint /inbox-notifications/v1/notifications (platform:web, X-Next-App:marketplace-web), fallback /api/v2/notifications
     const tries = [
-      { path: `/inbox-notifications/v1/notifications?page=${page}&per_page=20`, headers: { platform: "web", "X-Next-App": "marketplace-web" } },
+      { path: alApiHostUrl(`/inbox-notifications/v1/notifications?page=${page}&per_page=20`), headers: { platform: "web", "X-Next-App": "marketplace-web" } },
+      { path: `/web/api/notifications/notifications?page=${page}&per_page=20`, headers: { platform: "web" } },
       { path: `/api/v2/notifications?page=${page}&per_page=20`, headers: {} },
     ];
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -582,7 +588,7 @@
               break;
             }
             const arr = r?.notifications ?? r?.data;
-            if (Array.isArray(arr)) return { notifications: arr, pagination: r?.pagination || {} };
+            if (Array.isArray(arr)) return { notifications: arr, pagination: r?.pagination || r?.meta || {} };
           }
         } catch (e) {
           const msg = String(e?.message || e);
@@ -613,14 +619,18 @@
     let page = 1;
     const collected = [];
     let stop = false;
+    let totalNotifs = 0;
+    let totalLikes = 0;
 
     while (!stop) {
       const { notifications, pagination } = await alFetchNotificationsPage(page);
       if (!notifications.length) break;
+      totalNotifs += notifications.length;
 
       for (const notif of notifications) {
         const like = alExtractLikeInfo(notif);
         if (!like) continue;
+        totalLikes++;
         const updatedAt = like.updatedAt ? new Date(like.updatedAt) : null;
 
         if (isBacklog) {
@@ -632,17 +642,21 @@
           if (alLatestId && like.notifId === alLatestId) { stop = true; break; }
           if (alProcessedIds.has(like.notifId)) continue;
           collected.push(like);
-          if (!isBacklog && !cutoffDate) {
-            // Live (no time filter): only first page newest items
-          }
         }
       }
 
       if (stop) break;
-      if (!isBacklog) break; // live: tylko 1 strona
+      if (!isBacklog) break;
       if (pagination.total_pages && page >= pagination.total_pages) break;
+      if (page >= 10) break;
       page++;
       await alSleep(alRand(2000, 4000));
+    }
+
+    if (totalNotifs > 0 && totalLikes === 0) {
+      await alPushStat(`ℹ ${totalNotifs} powiadomień, 0 polubień (entry_type≠20)`);
+    } else if (totalLikes > 0 && collected.length === 0) {
+      await alPushStat(`ℹ ${totalLikes} polubień ale wszystkie już przetworzone/poza oknem`);
     }
 
     return collected;
