@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.8.0";
+  const CONTENT_VERSION = "0.8.3";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -516,11 +516,11 @@
       <style>
         #vm-sidebar-root { position: fixed; top:0; right:0; height:100vh; z-index: 2147483646; font-family:-apple-system,system-ui,sans-serif; }
         #vm-handle {
-          position:fixed; top:50%; right:0; transform:translateY(-50%);
+          position:fixed; top:50%; left:0; transform:translateY(-50%);
           width:32px; height:84px; background:#5eead4; color:#0b1220;
-          border-radius:8px 0 0 8px; display:flex; align-items:center; justify-content:center;
-          cursor:pointer; box-shadow:-2px 2px 8px rgba(0,0,0,.25); font-size:18px; font-weight:700;
-          transition:right .25s ease, top .25s ease, height .25s ease;
+          border-radius:0 8px 8px 0; display:flex; align-items:center; justify-content:center;
+          cursor:pointer; box-shadow:2px 2px 8px rgba(0,0,0,.25); font-size:18px; font-weight:700;
+          transition:left .25s ease, top .25s ease, height .25s ease;
         }
         #vm-handle:hover { background:#7af0db; }
         #vm-drawer {
@@ -529,10 +529,10 @@
           transform:translateX(100%); transition:transform .25s ease; display:flex; flex-direction:column;
         }
         #vm-sidebar-root.open #vm-drawer { transform:translateX(0); }
-        #vm-sidebar-root.open #vm-handle { right:12px; top:18px; height:44px; transform:none; border-radius:8px; z-index:2147483647; }
+        #vm-sidebar-root.open #vm-handle { left:12px; top:18px; height:44px; transform:none; border-radius:8px; z-index:2147483647; }
         #vm-drawer iframe { flex:1; width:100%; border:0; background:#0f1420; }
       </style>
-      <div id="vm-handle" title="Vinted Manager"><span id="vm-arrow">‹</span></div>
+      <div id="vm-handle" title="Vinted Manager"><span id="vm-arrow">›</span></div>
       <div id="vm-drawer"></div>
     `;
     document.documentElement.appendChild(root);
@@ -542,7 +542,7 @@
     let loaded = false;
     handle.addEventListener("click", () => {
       const open = root.classList.toggle("open");
-      arrow.textContent = open ? "›" : "‹";
+      arrow.textContent = open ? "‹" : "›";
       if (open && !loaded) {
         const iframe = document.createElement("iframe");
         iframe.src = chrome.runtime.getURL("panel.html?embedded=1");
