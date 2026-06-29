@@ -727,7 +727,39 @@ const AL_DEFAULTS = {
   autoLikesDelayNotifMax: 120000,
   autoLikesMsgDelayMin: 30000,
   autoLikesMsgDelayMax: 60000,
+  autoLikesTimeFilter: 0,
 };
+
+function initDualSlider(minSel, maxSel, rangeSel, labelMinSel, labelMaxSel) {
+  const minEl = $(minSel);
+  const maxEl = $(maxSel);
+  const rangeEl = $(rangeSel);
+  const labelMin = $(labelMinSel);
+  const labelMax = $(labelMaxSel);
+  if (!minEl || !maxEl || !rangeEl) return;
+  const lo = parseInt(minEl.min);
+  const hi = parseInt(minEl.max);
+  function update() {
+    let vMin = parseInt(minEl.value);
+    let vMax = parseInt(maxEl.value);
+    if (vMin > vMax) {
+      if (document.activeElement === minEl) { maxEl.value = vMin; vMax = vMin; }
+      else { minEl.value = vMax; vMin = vMax; }
+    }
+    const pMin = ((vMin - lo) / (hi - lo)) * 100;
+    const pMax = ((vMax - lo) / (hi - lo)) * 100;
+    rangeEl.style.left = pMin + '%';
+    rangeEl.style.width = (pMax - pMin) + '%';
+    if (labelMin) labelMin.textContent = vMin + 's';
+    if (labelMax) labelMax.textContent = vMax + 's';
+  }
+  if (!minEl.dataset.dsInit) {
+    minEl.addEventListener('input', update);
+    maxEl.addEventListener('input', update);
+    minEl.dataset.dsInit = '1';
+  }
+  update();
+}
 
 async function loadAutoLikes() {
   const stored = await chrome.storage.local.get(Object.keys(AL_DEFAULTS).concat(["autoLikesStats"]));
@@ -740,6 +772,9 @@ async function loadAutoLikes() {
   $("#alNotifMax").value = Math.round(s.autoLikesDelayNotifMax / 1000);
   $("#alMsgMin").value = Math.round(s.autoLikesMsgDelayMin / 1000);
   $("#alMsgMax").value = Math.round(s.autoLikesMsgDelayMax / 1000);
+  $("#alTimeFilter").value = String(s.autoLikesTimeFilter ?? 0);
+  initDualSlider("#alNotifMin", "#alNotifMax", "#alNotifRange", "#alNotifMinLabel", "#alNotifMaxLabel");
+  initDualSlider("#alMsgMin", "#alMsgMax", "#alMsgRange", "#alMsgMinLabel", "#alMsgMaxLabel");
   $("#alRunStatus").textContent = s.autoLikesEnabled ? "działa ✓" : "zatrzymane";
   const stats = stored.autoLikesStats || { sent: 0, lastEvent: "—" };
   $("#alSentCount").textContent = stats.sent || 0;
@@ -760,6 +795,7 @@ function readAutoLikesForm() {
     autoLikesDelayNotifMax: num("#alNotifMax", 120) * 1000,
     autoLikesMsgDelayMin: num("#alMsgMin", 30) * 1000,
     autoLikesMsgDelayMax: num("#alMsgMax", 60) * 1000,
+    autoLikesTimeFilter: parseInt($("#alTimeFilter").value) || 0,
   };
 }
 
