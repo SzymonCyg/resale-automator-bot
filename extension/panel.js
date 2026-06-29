@@ -338,10 +338,14 @@ function renderRelistList() {
       <div class="r-fields">
         <div class="r-title-wrap"></div>
         <div class="r-desc-wrap"></div>
-      </div>
-      <div class="r-price">
-        <input type="number" step="0.01" min="0" value="${computePrice(st)}" />
-        <span class="r-preview"></span>
+        <div class="r-price">
+          <label class="r-price-label">Cena</label>
+          <div class="r-price-input">
+            <input type="number" step="0.01" min="0" value="${computePrice(st)}" />
+            <span class="r-currency">${getCurrency()}</span>
+          </div>
+          <span class="r-preview"></span>
+        </div>
       </div>
     </div>`).join("");
 
@@ -357,6 +361,29 @@ function renderRelistList() {
     });
   });
   refreshPricePreviews();
+}
+
+// ---------- CURRENCY DETECTION ----------
+const CURRENCY_MAP = {
+  "vinted.at": "€", "vinted.be": "€", "vinted.cz": "Kč", "vinted.de": "€",
+  "vinted.dk": "kr", "vinted.ee": "€", "vinted.es": "€", "vinted.fi": "€",
+  "vinted.fr": "€", "vinted.gr": "€", "vinted.hr": "€", "vinted.hu": "Ft",
+  "vinted.ie": "€", "vinted.it": "€", "vinted.lt": "€", "vinted.lu": "€",
+  "vinted.lv": "€", "vinted.nl": "€", "vinted.pl": "zł", "vinted.pt": "€",
+  "vinted.ro": "lei", "vinted.se": "kr", "vinted.si": "€", "vinted.sk": "€",
+  "vinted.co.uk": "£", "vinted.com": "$", "vinted.com.au": "A$",
+};
+function getCurrency() {
+  try {
+    const ref = document.referrer || "";
+    const host = ref ? new URL(ref).hostname.replace(/^www\./, "") : "";
+    // try exact + suffix match
+    if (CURRENCY_MAP[host]) return CURRENCY_MAP[host];
+    for (const d of Object.keys(CURRENCY_MAP)) {
+      if (host.endsWith(d)) return CURRENCY_MAP[d];
+    }
+  } catch {}
+  return "zł";
 }
 
 function mountCollapsible(host, kind, st, i, multiline) {

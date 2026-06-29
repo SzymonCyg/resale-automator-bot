@@ -66,18 +66,21 @@ textarea { min-height:60px; width:100%; resize:vertical; }
 .relist-summary { padding:14px; color:var(--m); text-align:center; background:var(--s1); border:1px solid var(--b); border-radius:10px; }
 .relist-list { display:flex; flex-direction:column; gap:10px; }
 
-.r-item { display:grid; grid-template-columns:64px 1fr auto; gap:14px; align-items:center; background:var(--s1); border:1px solid var(--b); border-radius:10px; padding:12px 14px; }
-.r-item .r-thumb { width:64px; height:64px; object-fit:cover; border-radius:6px; background:var(--s2); }
-.r-item .r-fields { display:flex; flex-direction:column; gap:6px; min-width:0; }
-.r-collapsed { background:var(--s2); border:1px solid var(--b); border-radius:6px; padding:7px 10px; cursor:text; color:var(--t); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.r-item { display:grid; grid-template-columns:120px 1fr; gap:16px; align-items:flex-start; background:var(--s1); border:1px solid var(--b); border-radius:10px; padding:14px; }
+.r-item .r-thumb { width:120px; height:120px; object-fit:cover; border-radius:8px; background:var(--s2); }
+.r-item .r-fields { display:flex; flex-direction:column; gap:8px; min-width:0; }
+.r-collapsed { background:var(--s2); border:1px solid var(--b); border-radius:6px; padding:8px 10px; cursor:text; color:var(--t); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:400; }
 .r-collapsed.desc { color:var(--m); font-size:12px; }
 .r-collapsed:hover { border-color:var(--p); }
 .r-expanded { display:flex; flex-direction:column; gap:6px; }
-.r-expanded input, .r-expanded textarea { width:100%; }
+.r-expanded input, .r-expanded textarea { width:100%; font-size:13px; font-family:inherit; }
 .r-expanded textarea { min-height:120px; }
 .r-expanded .r-done { align-self:flex-end; }
-.r-price { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
-.r-price input { width:110px; text-align:right; }
+.r-price { display:flex; flex-direction:column; gap:4px; margin-top:4px; }
+.r-price-label { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--m); }
+.r-price-input { display:inline-flex; align-items:center; gap:6px; background:var(--s2); border:1px solid var(--b); border-radius:6px; padding:4px 10px; width:fit-content; }
+.r-price-input input { width:90px; text-align:right; border:none; background:transparent; outline:none; color:var(--t); font-size:14px; padding:2px 0; }
+.r-price-input .r-currency { color:var(--m); font-size:13px; }
 .r-price .r-preview { font-size:11px; color:var(--m); }
 
 /* Photo edit overlay */
