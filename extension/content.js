@@ -558,14 +558,34 @@
       `/web/api/notifications/notifications?page=${page}&per_page=20`,
       `/api/v2/notifications?page=${page}&per_page=20`,
     ];
-    for (const path of tries) {
-      try {
-        const r = await vintedApi(path);
-        const arr = r?.notifications ?? r?.data;
-        if (Array.isArray(arr)) {
-          return { notifications: arr, pagination: r?.pagination || {} };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let rateLimited = false;
+      for (const path of tries) {
+        try {
+          const r = await vintedApi(path);
+          if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
+            await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
+            rateLimited = true;
+            break;
+          }
+          const arr = r?.notifications ?? r?.data;
+          if (Array.isArray(arr)) {
+            return { notifications: arr, pagination: r?.pagination || {} };
+          }
+        } catch (e) {
+          const msg = String(e?.message || e);
+          if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+            await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
+            rateLimited = true;
+            break;
+          }
         }
-      } catch {}
+      }
+      if (rateLimited) {
+        await alSleep(alRand(90000, 120000));
+        continue;
+      }
+      break;
     }
     return { notifications: [], pagination: {} };
   }
@@ -613,7 +633,7 @@
       if (!isBacklog) break; // live: tylko 1 strona
       if (pagination.total_pages && page >= pagination.total_pages) break;
       page++;
-      await alSleep(alRand(300, 600));
+      await alSleep(alRand(2000, 4000));
     }
 
     return collected;
@@ -631,6 +651,29 @@
     });
   }
 
+  async function alCreateConversationSafe(itemId, userId, csrfToken) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await alCreateConversation(itemId, userId, csrfToken);
+        if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
+          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
+          await alSleep(alRand(90000, 120000));
+          continue;
+        }
+        return r;
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
+          await alSleep(alRand(90000, 120000));
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error('Rate limit — przekroczono liczbę prób');
+  }
+
   function alCalcDiscount(orig, amount, unit) {
     if (unit === '%') return Math.max(1, Math.round(orig * (1 - amount/100) * 100) / 100);
     return Math.max(1, Math.round((orig - amount) * 100) / 100);
@@ -645,11 +688,30 @@
   }
 
   async function alSendReply(conversationId, body, csrfToken) {
-    return vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
-      method: "POST",
-      csrfToken,
-      body: JSON.stringify({ reply: { body } }),
-    });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
+          method: "POST",
+          csrfToken,
+          body: JSON.stringify({ reply: { body } }),
+        });
+        if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
+          await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
+          await alSleep(alRand(90000, 120000));
+          continue;
+        }
+        return r;
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+          await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
+          await alSleep(alRand(90000, 120000));
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error('Rate limit — przekroczono liczbę prób');
   }
 
   let alRunning = false;
@@ -671,7 +733,7 @@
       const cur = await alGetSettings();
       if (!cur.autoLikesEnabled) return false;
       try {
-        const convRes = await alCreateConversation(like.itemId, like.userId, csrfToken);
+        const convRes = await alCreateConversationSafe(like.itemId, like.userId, csrfToken);
         const conv = convRes?.conversation || convRes?.thread || convRes;
         const oppLogin = conv?.opposite_user?.login || conv?.opposite_user?.username || like.login || String(like.userId);
         const msgs = conv?.messages || [];
@@ -712,7 +774,8 @@
           alLatestId = like.notifId;
           if (like.updatedAt) alLatestDate = new Date(like.updatedAt);
         }
-        await alSleep(alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
+        const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
+        await alSleep(msgDelay);
       } catch (e) {
         await alPushStat(`✗ ${like.login || like.userId}: ${e.message}`);
         alProcessedIds.add(like.notifId);
