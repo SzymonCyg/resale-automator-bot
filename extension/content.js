@@ -688,11 +688,30 @@
   }
 
   async function alSendReply(conversationId, body, csrfToken) {
-    return vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
-      method: "POST",
-      csrfToken,
-      body: JSON.stringify({ reply: { body } }),
-    });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
+          method: "POST",
+          csrfToken,
+          body: JSON.stringify({ reply: { body } }),
+        });
+        if (r && (r.message_code === 'rate_limit_exceeded' || r.code === 106)) {
+          await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
+          await alSleep(alRand(90000, 120000));
+          continue;
+        }
+        return r;
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (msg.includes('429') || msg.includes('rate_limit') || msg.includes('106')) {
+          await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
+          await alSleep(alRand(90000, 120000));
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error('Rate limit — przekroczono liczbę prób');
   }
 
   let alRunning = false;
@@ -714,7 +733,7 @@
       const cur = await alGetSettings();
       if (!cur.autoLikesEnabled) return false;
       try {
-        const convRes = await alCreateConversation(like.itemId, like.userId, csrfToken);
+        const convRes = await alCreateConversationSafe(like.itemId, like.userId, csrfToken);
         const conv = convRes?.conversation || convRes?.thread || convRes;
         const oppLogin = conv?.opposite_user?.login || conv?.opposite_user?.username || like.login || String(like.userId);
         const msgs = conv?.messages || [];
@@ -755,7 +774,8 @@
           alLatestId = like.notifId;
           if (like.updatedAt) alLatestDate = new Date(like.updatedAt);
         }
-        await alSleep(alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
+        const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
+        await alSleep(msgDelay);
       } catch (e) {
         await alPushStat(`✗ ${like.login || like.userId}: ${e.message}`);
         alProcessedIds.add(like.notifId);
