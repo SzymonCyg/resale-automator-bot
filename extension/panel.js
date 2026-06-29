@@ -715,13 +715,105 @@ $("#saveSettings").addEventListener("click", async () => {
   setTimeout(() => ($("#saveStatus").textContent = ""), 2000);
 });
 
+
+// ---------- AUTO-LIKES ----------
+const AL_DEFAULTS = {
+  autoLikesEnabled: false,
+  autoLikesTemplate: "Cześć @username! Widziałem, że polubiłeś mój przedmiot i chciałem od razu zaoferować Ci specjalną zniżkę! 💸",
+  autoLikesDiscount: false,
+  autoLikesDiscountAmount: 10,
+  autoLikesDiscountUnit: '%',
+  autoLikesDelayNotifMin: 60000,
+  autoLikesDelayNotifMax: 120000,
+  autoLikesMsgDelayMin: 30000,
+  autoLikesMsgDelayMax: 60000,
+};
+
+async function loadAutoLikes() {
+  const stored = await chrome.storage.local.get(Object.keys(AL_DEFAULTS).concat(["autoLikesStats"]));
+  const s = { ...AL_DEFAULTS, ...stored };
+  $("#alTemplate").value = s.autoLikesTemplate;
+  $("#alDiscount").checked = !!s.autoLikesDiscount;
+  $("#alDiscountAmount").value = s.autoLikesDiscountAmount;
+  $("#alDiscountUnit").value = s.autoLikesDiscountUnit;
+  $("#alNotifMin").value = Math.round(s.autoLikesDelayNotifMin / 1000);
+  $("#alNotifMax").value = Math.round(s.autoLikesDelayNotifMax / 1000);
+  $("#alMsgMin").value = Math.round(s.autoLikesMsgDelayMin / 1000);
+  $("#alMsgMax").value = Math.round(s.autoLikesMsgDelayMax / 1000);
+  $("#alRunStatus").textContent = s.autoLikesEnabled ? "działa ✓" : "zatrzymane";
+  const stats = stored.autoLikesStats || { sent: 0, lastEvent: "—" };
+  $("#alSentCount").textContent = stats.sent || 0;
+  $("#alLastEvent").textContent = stats.lastEvent || "—";
+}
+
+function readAutoLikesForm() {
+  const num = (id, def) => {
+    const v = Number($(id).value);
+    return Number.isFinite(v) && v > 0 ? v : def;
+  };
+  return {
+    autoLikesTemplate: $("#alTemplate").value || AL_DEFAULTS.autoLikesTemplate,
+    autoLikesDiscount: $("#alDiscount").checked,
+    autoLikesDiscountAmount: num("#alDiscountAmount", AL_DEFAULTS.autoLikesDiscountAmount),
+    autoLikesDiscountUnit: $("#alDiscountUnit").value,
+    autoLikesDelayNotifMin: num("#alNotifMin", 60) * 1000,
+    autoLikesDelayNotifMax: num("#alNotifMax", 120) * 1000,
+    autoLikesMsgDelayMin: num("#alMsgMin", 30) * 1000,
+    autoLikesMsgDelayMax: num("#alMsgMax", 60) * 1000,
+  };
+}
+
+async function saveAutoLikes(extra = {}) {
+  const data = { ...readAutoLikesForm(), ...extra };
+  await chrome.storage.local.set(data);
+  return data;
+}
+
+$("#alSaveBtn").addEventListener("click", async () => {
+  await saveAutoLikes();
+  $("#alSaveStatus").textContent = "✓ Zapisano";
+  setTimeout(() => ($("#alSaveStatus").textContent = ""), 2000);
+});
+
+$("#alStartBtn").addEventListener("click", async () => {
+  await saveAutoLikes({ autoLikesEnabled: true });
+  $("#alRunStatus").textContent = "działa ✓";
+  const tab = await getVintedTab();
+  if (tab) await vintedMsg(tab.id, { kind: "AUTOLIKES_KICK" }).catch(() => {});
+});
+
+$("#alStopBtn").addEventListener("click", async () => {
+  await chrome.storage.local.set({ autoLikesEnabled: false });
+  $("#alRunStatus").textContent = "zatrzymane";
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.autoLikesStats) {
+    const s = changes.autoLikesStats.newValue || {};
+    $("#alSentCount").textContent = s.sent || 0;
+    $("#alLastEvent").textContent = s.lastEvent || "—";
+    if (s.logLine) {
+      const el = $("#alLog");
+      const div = document.createElement("div");
+      div.textContent = s.logLine;
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+    }
+  }
+  if (changes.autoLikesEnabled) {
+    $("#alRunStatus").textContent = changes.autoLikesEnabled.newValue ? "działa ✓" : "zatrzymane";
+  }
+});
+
 // ---------- BOOT ----------
 async function boot() {
   const status = await bg("GET_STATUS");
   if (status?.signedIn) {
     await enterMain();
+    await loadAutoLikes();
   } else {
     showScreen("login");
   }
 }
 boot();
+
