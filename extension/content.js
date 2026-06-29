@@ -543,7 +543,7 @@
     let loaded = false;
     handle.addEventListener("click", () => {
       const open = root.classList.toggle("open");
-      arrow.textContent = open ? "‹" : "›";
+      arrow.textContent = open ? "›" : "‹";
       if (open && !loaded) {
         const iframe = document.createElement("iframe");
         iframe.src = chrome.runtime.getURL("panel.html?embedded=1");
