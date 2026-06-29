@@ -211,25 +211,49 @@ $("#relistBtn").addEventListener("click", openRelist);
 $("#closeRelist").addEventListener("click", closeRelist);
 $("#cancelRelist").addEventListener("click", closeRelist);
 
-function currentMode() {
-  return document.querySelector("input[name=photoMode]:checked")?.value || "auto";
+let photoMode = "auto";   // 'auto' | 'manual'
+let priceMode = "keep";   // 'keep' | 'percent'
+
+$$(".tile[data-photo]").forEach((t) =>
+  t.addEventListener("click", () => {
+    $$(".tile[data-photo]").forEach((x) => x.classList.toggle("active", x === t));
+    photoMode = t.dataset.photo;
+    if (photoMode === "manual") openPhotoEditor();
+  }),
+);
+$$(".tile[data-price]").forEach((t) =>
+  t.addEventListener("click", () => {
+    $$(".tile[data-price]").forEach((x) => x.classList.toggle("active", x === t));
+    priceMode = t.dataset.price;
+    $("#percentBox").classList.toggle("hidden", priceMode !== "percent");
+    refreshPricePreviews();
+  }),
+);
+$("#pricePercent").addEventListener("input", refreshPricePreviews);
+
+function getPercent() {
+  const v = Number($("#pricePercent").value);
+  return Number.isFinite(v) && v > 0 && v < 100 ? v : 0;
 }
-
-$$('input[name=photoMode]').forEach((r) => r.addEventListener("change", updateRelistView));
-
-function updateRelistView() {
-  const mode = currentMode();
-  const summary = $("#relistSummary");
-  const list = $("#relistList");
-  if (mode === "auto") {
-    list.classList.add("hidden");
-    summary.classList.remove("hidden");
-    summary.textContent = `${relistState.length} przedmiotów zostanie wystawionych ponownie bez zmian.`;
-  } else {
-    summary.classList.add("hidden");
-    list.classList.remove("hidden");
-    renderRelist();
+function computePrice(st) {
+  if (st.manualPrice != null) return st.manualPrice;
+  if (priceMode === "percent") {
+    const pct = getPercent();
+    if (pct > 0) return Math.round(st.origPrice * (1 - pct / 100) * 100) / 100;
   }
+  return st.origPrice;
+}
+function refreshPricePreviews() {
+  $$("#relistList .r-item").forEach((row) => {
+    const i = Number(row.dataset.i);
+    const st = relistState[i];
+    if (!st) return;
+    const input = row.querySelector(".r-price input");
+    const prev = row.querySelector(".r-price .r-preview");
+    if (st.manualPrice == null) input.value = String(computePrice(st));
+    prev.textContent = priceMode === "percent" && st.manualPrice == null && getPercent() > 0
+      ? `−${getPercent()}% z ${st.origPrice}` : "";
+  });
 }
 
 async function openRelist() {
@@ -237,6 +261,13 @@ async function openRelist() {
   $("#relistCount").textContent = chosen.length;
   $("#relistLog").innerHTML = "";
   $("#relistModal").classList.remove("hidden");
+
+  // reset modes
+  photoMode = "auto"; priceMode = "keep";
+  $$(".tile[data-photo]").forEach((x) => x.classList.toggle("active", x.dataset.photo === "auto"));
+  $$(".tile[data-price]").forEach((x) => x.classList.toggle("active", x.dataset.price === "keep"));
+  $("#percentBox").classList.add("hidden");
+  $("#pricePercent").value = "";
 
   const tab = await getVintedTab();
   $("#relistSummary").textContent = "Wczytuję zdjęcia...";
@@ -249,21 +280,28 @@ async function openRelist() {
       const detail = r?.item || it;
       const photoUrls = detail.photos?.map((p) => p.full_size_url || p.url) || (it.photo_url ? [it.photo_url] : []);
       const photos = await Promise.all(photoUrls.map(loadPhoto));
+      const price = Number(it.price) || 0;
       relistState.push({
         item: detail,
-        price: Number(it.price) || 0,
+        origPrice: price,
+        manualPrice: null,
         currency: it.currency,
+        title: detail.title || it.title || "",
+        description: detail.description || "",
         photos: photos.map((p) => ({ ...p, rotation: 0, crop: null })),
       });
     } catch (e) {
       log(`✗ ${it.title}: ${e.message}`, "err");
     }
   }
-  updateRelistView();
+  $("#relistSummary").classList.add("hidden");
+  $("#relistList").classList.remove("hidden");
+  renderRelistList();
 }
 
 function closeRelist() {
   $("#relistModal").classList.add("hidden");
+  $("#photoEditOverlay").classList.add("hidden");
   relistState = [];
 }
 
@@ -288,135 +326,262 @@ async function loadPhoto(url) {
   return { dataUrl, w: img.naturalWidth, h: img.naturalHeight, url };
 }
 
-function renderRelist() {
+function renderRelistList() {
   const list = $("#relistList");
   if (!relistState.length) {
     list.innerHTML = `<p class="muted" style="padding:16px">Brak przedmiotów do edycji.</p>`;
     return;
   }
   list.innerHTML = relistState.map((st, i) => `
-    <div class="relist-item" data-i="${i}">
-      <div>
-        <h3>${escapeHtml(st.item.title || "")}</h3>
-        <p class="muted">#${st.item.id} · ${escapeHtml(st.item.brand_title || st.item.brand || "")}</p>
+    <div class="r-item" data-i="${i}">
+      <img class="r-thumb" src="${st.photos[0]?.dataUrl || ''}" alt="" />
+      <div class="r-fields">
+        <div class="r-title-wrap"></div>
+        <div class="r-desc-wrap"></div>
       </div>
-      <div>
-        <div class="photos">
-          ${st.photos.map((_, j) => `
-            <div class="photo-edit" data-j="${j}">
-              <canvas width="240" height="240"></canvas>
-              <div class="actions">
-                <button data-act="rotL">⟲</button>
-                <button data-act="rot1">+1°</button>
-                <button data-act="rotN1">-1°</button>
-                <button data-act="rotR">⟳</button>
-                <button data-act="reset">↺</button>
-                <button data-act="del" title="Usuń zdjęcie">×</button>
-              </div>
-            </div>`).join("")}
-        </div>
+      <div class="r-price">
+        <input type="number" step="0.01" min="0" value="${computePrice(st)}" />
+        <span class="r-preview"></span>
       </div>
     </div>`).join("");
 
-  $$(".relist-item").forEach((row) => {
+  $$("#relistList .r-item").forEach((row) => {
     const i = Number(row.dataset.i);
-    row.querySelectorAll(".photo-edit").forEach((pe) => {
+    const st = relistState[i];
+    mountCollapsible(row.querySelector(".r-title-wrap"), "title", st, i, false);
+    mountCollapsible(row.querySelector(".r-desc-wrap"), "desc", st, i, true);
+    const priceInput = row.querySelector(".r-price input");
+    priceInput.addEventListener("input", () => {
+      const v = Number(priceInput.value);
+      st.manualPrice = Number.isFinite(v) ? v : null;
+    });
+  });
+  refreshPricePreviews();
+}
+
+function mountCollapsible(host, kind, st, i, multiline) {
+  const key = kind === "title" ? "title" : "description";
+  const text = st[key] || "";
+  host.innerHTML = "";
+  const collapsed = document.createElement("div");
+  collapsed.className = "r-collapsed" + (multiline ? " desc" : "");
+  collapsed.textContent = text || (multiline ? "(brak opisu — kliknij aby dodać)" : "(brak tytułu)");
+  collapsed.title = "Kliknij aby edytować";
+  collapsed.addEventListener("click", () => {
+    host.innerHTML = "";
+    const wrap = document.createElement("div");
+    wrap.className = "r-expanded";
+    const field = document.createElement(multiline ? "textarea" : "input");
+    if (!multiline) field.type = "text";
+    field.value = st[key] || "";
+    const done = document.createElement("button");
+    done.className = "btn r-done";
+    done.textContent = "Gotowe";
+    done.addEventListener("click", () => {
+      st[key] = field.value;
+      mountCollapsible(host, kind, st, i, multiline);
+    });
+    wrap.appendChild(field);
+    wrap.appendChild(done);
+    host.appendChild(wrap);
+    field.focus();
+  });
+  host.appendChild(collapsed);
+}
+
+// ---------- PHOTO EDITOR OVERLAY ----------
+$("#closePhotoEdit").addEventListener("click", () => {
+  $("#photoEditOverlay").classList.add("hidden");
+});
+
+function openPhotoEditor() {
+  if (!relistState.length) return;
+  $("#photoEditOverlay").classList.remove("hidden");
+  const body = $("#photoEditBody");
+  body.innerHTML = relistState.map((st, i) => `
+    <div class="pe-item" data-i="${i}">
+      <h4>${escapeHtml(st.title || st.item.title || "")}</h4>
+      <div class="pe-photos">
+        ${st.photos.map((_, j) => `
+          <div class="pe-photo" data-j="${j}">
+            <div class="pe-canvas-wrap"><canvas width="560" height="560"></canvas></div>
+            <div class="pe-actions">
+              <button data-act="rotL">⟲ −90°</button>
+              <button data-act="rotR">⟳ +90°</button>
+              <button data-act="rotN1">−1°</button>
+              <button data-act="rot1">+1°</button>
+              <button data-act="cropClear">Resetuj crop</button>
+              <button data-act="reset">↺ Reset</button>
+              <button data-act="del">× Usuń</button>
+            </div>
+          </div>`).join("")}
+      </div>
+    </div>`).join("");
+  $$(".pe-item").forEach((row) => {
+    const i = Number(row.dataset.i);
+    row.querySelectorAll(".pe-photo").forEach((pe) => {
       const j = Number(pe.dataset.j);
-      drawPhoto(i, j);
-      pe.querySelectorAll("button").forEach((b) =>
+      const canvas = pe.querySelector("canvas");
+      drawEditorCanvas(canvas, relistState[i].photos[j]);
+      attachCropDrag(canvas, relistState[i].photos[j]);
+      pe.querySelectorAll(".pe-actions button").forEach((b) => {
         b.addEventListener("click", () => {
           const a = b.dataset.act;
+          const p = relistState[i].photos[j];
           if (a === "del") {
-            if (relistState[i].photos.length <= 1) {
-              alert("Przedmiot musi mieć co najmniej 1 zdjęcie.");
-              return;
-            }
+            if (relistState[i].photos.length <= 1) { alert("Min. 1 zdjęcie."); return; }
             relistState[i].photos.splice(j, 1);
-            renderRelist();
+            openPhotoEditor();
             return;
           }
-          const p = relistState[i].photos[j];
           if (a === "rotL") p.rotation -= 90;
           else if (a === "rotR") p.rotation += 90;
           else if (a === "rot1") p.rotation += 1;
           else if (a === "rotN1") p.rotation -= 1;
+          else if (a === "cropClear") p.crop = null;
           else if (a === "reset") { p.rotation = 0; p.crop = null; }
-          drawPhoto(i, j);
-        }),
-      );
+          drawEditorCanvas(canvas, p);
+        });
+      });
     });
   });
 }
 
-function drawPhoto(i, j) {
-  const p = relistState[i].photos[j];
-  const canvas = document.querySelector(`.relist-item[data-i="${i}"] .photo-edit[data-j="${j}"] canvas`);
-  if (!canvas) return;
+function drawEditorCanvas(canvas, p) {
   const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   const img = new Image();
   img.onload = () => {
+    let sx = 0, sy = 0, sw = img.width, sh = img.height;
+    if (p.crop) { sx = p.crop.x; sy = p.crop.y; sw = p.crop.w; sh = p.crop.h; }
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((p.rotation * Math.PI) / 180);
-    const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
-    const w = img.width * scale, h = img.height * scale;
-    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    const scale = Math.min(canvas.width / sw, canvas.height / sh);
+    const w = sw * scale, h = sh * scale;
+    ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
     ctx.restore();
+    // existing crop is already applied to source; show pending drag rect via overlay layer
+    if (canvas._pendingRect) {
+      const r = canvas._pendingRect;
+      ctx.strokeStyle = "#5eead4";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.setLineDash([]);
+    }
   };
   img.src = p.dataUrl;
 }
 
+function attachCropDrag(canvas, p) {
+  let start = null;
+  canvas.addEventListener("mousedown", (e) => {
+    const r = canvas.getBoundingClientRect();
+    start = { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
+    canvas._pendingRect = { x: start.x, y: start.y, w: 0, h: 0 };
+  });
+  canvas.addEventListener("mousemove", (e) => {
+    if (!start) return;
+    const r = canvas.getBoundingClientRect();
+    const cx = (e.clientX - r.left) * (canvas.width / r.width);
+    const cy = (e.clientY - r.top) * (canvas.height / r.height);
+    canvas._pendingRect = {
+      x: Math.min(start.x, cx), y: Math.min(start.y, cy),
+      w: Math.abs(cx - start.x), h: Math.abs(cy - start.y),
+    };
+    drawEditorCanvas(canvas, p);
+  });
+  canvas.addEventListener("mouseup", () => {
+    if (!start || !canvas._pendingRect) { start = null; return; }
+    const rect = canvas._pendingRect;
+    canvas._pendingRect = null;
+    start = null;
+    if (rect.w < 8 || rect.h < 8) { drawEditorCanvas(canvas, p); return; }
+    // Map canvas-space rect to source-image space (accounting for current crop & fit)
+    const baseW = p.crop ? p.crop.w : p.w;
+    const baseH = p.crop ? p.crop.h : p.h;
+    const scale = Math.min(canvas.width / baseW, canvas.height / baseH);
+    const drawnW = baseW * scale, drawnH = baseH * scale;
+    const offX = (canvas.width - drawnW) / 2;
+    const offY = (canvas.height - drawnH) / 2;
+    const rx = Math.max(0, (rect.x - offX) / scale);
+    const ry = Math.max(0, (rect.y - offY) / scale);
+    const rw = Math.min(baseW - rx, rect.w / scale);
+    const rh = Math.min(baseH - ry, rect.h / scale);
+    if (rw < 4 || rh < 4) { drawEditorCanvas(canvas, p); return; }
+    const baseX = p.crop ? p.crop.x : 0;
+    const baseY = p.crop ? p.crop.y : 0;
+    p.crop = { x: baseX + rx, y: baseY + ry, w: rw, h: rh };
+    drawEditorCanvas(canvas, p);
+  });
+  canvas.addEventListener("mouseleave", () => { start = null; canvas._pendingRect = null; });
+}
+
 async function exportPhoto(p, mode) {
-  let rotation = mode === "manual" ? p.rotation : 0;
   const img = await new Promise((r) => { const i = new Image(); i.onload = () => r(i); i.src = p.dataUrl; });
+  let sx = 0, sy = 0, sw = img.width, sh = img.height;
+  let rotation = 0;
+  if (mode === "manual") {
+    if (p.crop) { sx = p.crop.x; sy = p.crop.y; sw = p.crop.w; sh = p.crop.h; }
+    rotation = p.rotation || 0;
+  } else {
+    // auto: drobny obrót ±1°
+    rotation = Math.random() < 0.5 ? -1 : 1;
+  }
   const rad = (rotation * Math.PI) / 180;
   const sin = Math.abs(Math.sin(rad)), cos = Math.abs(Math.cos(rad));
-  const w = img.width, h = img.height;
-  const cw = Math.round(w * cos + h * sin);
-  const ch = Math.round(w * sin + h * cos);
+  const cw = Math.round(sw * cos + sh * sin);
+  const ch = Math.round(sw * sin + sh * cos);
   const c = new OffscreenCanvas(cw, ch);
   const ctx = c.getContext("2d");
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, cw, ch);
   ctx.translate(cw / 2, ch / 2);
   ctx.rotate(rad);
-  ctx.drawImage(img, -w / 2, -h / 2);
+  ctx.drawImage(img, sx, sy, sw, sh, -sw / 2, -sh / 2, sw, sh);
   return await c.convertToBlob({ type: "image/jpeg", quality: 0.92 });
 }
 
 $("#runRelist").addEventListener("click", async () => {
-  const mode = currentMode();
   const tab = await getVintedTab();
   if (!tab) return log("✗ Brak otwartej karty Vinted", "err");
   $("#runRelist").disabled = true;
   for (const st of relistState) {
-    log(`→ ${st.item.title} (${st.price} ${st.currency})...`);
+    const finalPrice = computePrice(st);
+    log(`→ ${st.title} (${finalPrice} ${st.currency})...`);
     try {
       const photos = [];
       for (const p of st.photos) {
-        const blob = await exportPhoto(p, mode);
+        const blob = await exportPhoto(p, photoMode);
         const dataUrl = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
         photos.push(dataUrl);
       }
       const detail = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL_V2", id: st.item.id });
       if (!detail?.ok) throw new Error(detail?.error || "Nie mogę pobrać szczegółów starego ogłoszenia");
-      const original = { ...detail.item, id: st.item.id, currency: st.currency };
+      const original = {
+        ...detail.item,
+        id: st.item.id,
+        currency: st.currency,
+        title: st.title,
+        description: st.description,
+      };
       const r = await vintedMsg(tab.id, {
         kind: "RELIST_ITEM_V2",
         original,
-        price: st.price,
+        price: finalPrice,
         currency: st.currency,
         photos,
       });
       if (r?.ok) {
         const delMsg = r.deletedOld ? ", stare usunięte" : `, ⚠ usunięcie starego: ${r.deleteError || "fail"}`;
-        log(`✓ ${st.item.title} — nowy ID ${r.newId}${delMsg}`, "ok");
+        log(`✓ ${st.title} — nowy ID ${r.newId}${delMsg}`, "ok");
       } else {
-        log(`✗ ${st.item.title}: ${r?.error || "fail"}`, "err");
+        log(`✗ ${st.title}: ${r?.error || "fail"}`, "err");
       }
     } catch (e) {
-      log(`✗ ${st.item.title}: ${e.message}`, "err");
+      log(`✗ ${st.title}: ${e.message}`, "err");
     }
   }
   $("#runRelist").disabled = false;
@@ -431,6 +596,7 @@ function log(s, cls = "") {
   el.appendChild(line);
   el.scrollTop = el.scrollHeight;
 }
+
 
 // ---------- SETTINGS ----------
 let rules = [];

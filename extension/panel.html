@@ -103,22 +103,71 @@
           <button id="closeRelist" class="btn ghost">✕</button>
         </header>
 
-        <div class="relist-controls">
-          <fieldset>
-            <legend>Tryb</legend>
-            <label><input type="radio" name="photoMode" value="auto" checked /> Automatyczna (bez zmian)</label>
-            <label><input type="radio" name="photoMode" value="manual" /> Ręczna (edytuj zdjęcia)</label>
-          </fieldset>
-        </div>
+        <div class="relist-body">
+          <div class="relist-options">
+            <div class="opt-col">
+              <h3 class="opt-title">Zdjęcia</h3>
+              <button class="tile active" data-photo="auto" type="button">
+                <span class="tile-ico">🔄</span>
+                <span class="tile-body">
+                  <span class="tile-title">Automatyczne zmiany</span>
+                  <span class="tile-sub">Drobny obrót ±1° dla każdego zdjęcia (omija detekcję duplikatów Vinted)</span>
+                </span>
+              </button>
+              <button class="tile" data-photo="manual" type="button">
+                <span class="tile-ico">✏️</span>
+                <span class="tile-body">
+                  <span class="tile-title">Ręczna edycja</span>
+                  <span class="tile-sub">Obróć i przytnij każde zdjęcie samodzielnie</span>
+                </span>
+              </button>
+            </div>
+            <div class="opt-col">
+              <h3 class="opt-title">Cena</h3>
+              <button class="tile active" data-price="keep" type="button">
+                <span class="tile-ico">💰</span>
+                <span class="tile-body">
+                  <span class="tile-title">Zostaw ceny</span>
+                  <span class="tile-sub">Ceny pozostają bez zmian</span>
+                </span>
+              </button>
+              <button class="tile" data-price="percent" type="button">
+                <span class="tile-ico">📉</span>
+                <span class="tile-body">
+                  <span class="tile-title">Zmniejsz cenę o %</span>
+                  <span class="tile-sub">Obniż wszystkie zaznaczone o procent</span>
+                </span>
+              </button>
+              <div id="percentBox" class="percent-box hidden">
+                <input type="number" id="pricePercent" min="1" max="99" step="1" placeholder="np. 10" />
+                <span class="muted">%</span>
+              </div>
+            </div>
+          </div>
 
-        <div id="relistSummary" class="relist-summary"></div>
-        <div id="relistList" class="relist-list hidden"></div>
+          <div class="relist-list-wrap">
+            <h3 class="opt-title">Zaznaczone przedmioty</h3>
+            <div id="relistSummary" class="relist-summary">Wczytuję...</div>
+            <div id="relistList" class="relist-list hidden"></div>
+          </div>
+        </div>
 
         <footer class="modal-foot">
           <button id="cancelRelist" class="btn ghost">Anuluj</button>
           <button id="runRelist" class="btn primary">Wykonaj ponowne wystawienie</button>
         </footer>
         <div id="relistLog" class="log"></div>
+      </div>
+    </div>
+
+    <!-- PHOTO EDIT OVERLAY -->
+    <div id="photoEditOverlay" class="modal hidden">
+      <div class="modal-inner">
+        <header class="modal-head">
+          <h2>Edycja zdjęć</h2>
+          <button id="closePhotoEdit" class="btn primary">Zapisz i zamknij</button>
+        </header>
+        <div id="photoEditBody" class="photo-edit-body"></div>
       </div>
     </div>
 
