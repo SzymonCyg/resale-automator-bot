@@ -499,14 +499,200 @@
     return true;
   });
 
+  // ============ AUTO-LIKES (auto-reply to item likes) ============
+  const AL_DEFAULTS = {
+    autoLikesEnabled: false,
+    autoLikesTemplate: "Cześć @username! Widziałem, że polubiłeś mój przedmiot i chciałem od razu zaoferować Ci specjalną zniżkę! 💸",
+    autoLikesDiscount: false,
+    autoLikesDiscountAmount: 10,
+    autoLikesDiscountUnit: '%',
+    autoLikesDelayNotifMin: 60000,
+    autoLikesDelayNotifMax: 120000,
+    autoLikesMsgDelayMin: 30000,
+    autoLikesMsgDelayMax: 60000,
+  };
+
+  function alRand(min, max) { return Math.floor(min + Math.random() * Math.max(1, max - min)); }
+  function alSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  async function alGetSettings() {
+    const s = await chrome.storage.local.get(Object.keys(AL_DEFAULTS).concat(["processedLikeNotifications", "autoLikesStats"]));
+    return { ...AL_DEFAULTS, ...s };
+  }
+
+  async function alPushStat(line, deltaSent = 0) {
+    const cur = (await chrome.storage.local.get(["autoLikesStats"])).autoLikesStats || { sent: 0 };
+    const next = {
+      sent: (cur.sent || 0) + deltaSent,
+      lastEvent: line,
+      lastAt: Date.now(),
+      logLine: `[${new Date().toLocaleTimeString()}] ${line}`,
+    };
+    await chrome.storage.local.set({ autoLikesStats: next });
+  }
+
+  async function alFetchNotifications() {
+    const tries = [
+      `/web/api/notifications/notifications?page=1&per_page=20`,
+      `/api/v2/notifications?page=1&per_page=20`,
+    ];
+    for (const path of tries) {
+      try {
+        const r = await vintedApi(path);
+        const arr = r?.notifications ?? r?.data ?? r;
+        if (Array.isArray(arr)) return arr;
+      } catch {}
+    }
+    return [];
+  }
+
+  function alExtractLikeInfo(n) {
+    // entry_type === 20 = polubienie
+    const entryType = n?.entry_type ?? n?.entryType ?? n?.type;
+    if (entryType !== 20 && entryType !== "20" && entryType !== "item_favourite" && entryType !== "favourite") return null;
+    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject?.id;
+    const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.actor?.id;
+    if (!itemId || !userId) return null;
+    return { notifId: String(n.id), itemId: String(itemId), userId: String(userId) };
+  }
+
+  async function alCreateConversation(itemId, oppositeUserId, csrfToken) {
+    return vintedApi(`/api/v2/conversations`, {
+      method: "POST",
+      csrfToken,
+      body: JSON.stringify({
+        initiator: "seller_enters_notification",
+        item_id: Number(itemId),
+        opposite_user_id: Number(oppositeUserId),
+      }),
+    });
+  }
+
+  function alCalcDiscount(orig, amount, unit) {
+    if (unit === '%') return Math.max(1, Math.round(orig * (1 - amount/100) * 100) / 100);
+    return Math.max(1, Math.round((orig - amount) * 100) / 100);
+  }
+
+  async function alSendOffer(transactionId, price, currency, csrfToken) {
+    return vintedApi(`/api/v2/transactions/${transactionId}/offers`, {
+      method: "POST",
+      csrfToken,
+      body: JSON.stringify({ offer: { price: String(price), currency } }),
+    });
+  }
+
+  async function alSendReply(conversationId, body, csrfToken) {
+    return vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
+      method: "POST",
+      csrfToken,
+      body: JSON.stringify({ reply: { body } }),
+    });
+  }
+
+  let alRunning = false;
+  let alKick = null;
+
+  async function alLoopOnce() {
+    const s = await alGetSettings();
+    if (!s.autoLikesEnabled) return false;
+    const processed = new Set(s.processedLikeNotifications || []);
+    const csrfToken = readCsrfToken();
+    let notifs;
+    try { notifs = await alFetchNotifications(); }
+    catch (e) { await alPushStat(`✗ powiadomienia: ${e.message}`); return true; }
+
+    const likes = notifs.map(alExtractLikeInfo).filter(Boolean).filter(x => !processed.has(x.notifId));
+    if (!likes.length) { await alPushStat(`brak nowych polubień`); return true; }
+
+    for (const like of likes) {
+      const cur = await alGetSettings();
+      if (!cur.autoLikesEnabled) return false;
+      try {
+        const convRes = await alCreateConversation(like.itemId, like.userId, csrfToken);
+        const conv = convRes?.conversation || convRes?.thread || convRes;
+        const msgs = conv?.messages || [];
+        if (msgs.length > 0) {
+          processed.add(like.notifId);
+          await alPushStat(`pominięto @${conv?.opposite_user?.login || like.userId} (już była konwersacja)`);
+          continue;
+        }
+        const oppLogin = conv?.opposite_user?.login || conv?.opposite_user?.username || String(like.userId);
+        // opcjonalnie oferta cenowa
+        if (cur.autoLikesDiscount) {
+          const txId = conv?.transaction?.id || conv?.transaction_id;
+          const origPrice = Number(conv?.transaction?.item_price?.amount
+            ?? conv?.transaction?.offer_price?.amount
+            ?? conv?.item?.price?.amount
+            ?? conv?.item?.price
+            ?? 0);
+          const curCode = conv?.transaction?.currency_code
+            || conv?.item?.price?.currency_code
+            || conv?.item?.currency
+            || "PLN";
+          if (txId && origPrice > 0) {
+            const newP = alCalcDiscount(origPrice, cur.autoLikesDiscountAmount, cur.autoLikesDiscountUnit);
+            try {
+              await alSendOffer(txId, newP, curCode, csrfToken);
+              await alPushStat(`💸 oferta ${newP} ${curCode} → @${oppLogin}`);
+            } catch (e) {
+              await alPushStat(`⚠ oferta @${oppLogin}: ${e.message}`);
+            }
+          }
+        }
+        // wiadomość
+        const convId = conv?.id || conv?.conversation_id;
+        const body = (cur.autoLikesTemplate || "").replace(/@username/g, oppLogin);
+        if (convId && body) {
+          await alSendReply(convId, body, csrfToken);
+          processed.add(like.notifId);
+          await alPushStat(`✓ wiadomość → @${oppLogin}`, 1);
+        }
+        // zapisz na bieżąco aby nie powtarzać przy crashu
+        await chrome.storage.local.set({ processedLikeNotifications: [...processed].slice(-2000) });
+        await alSleep(alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
+      } catch (e) {
+        await alPushStat(`✗ ${like.userId}: ${e.message}`);
+        processed.add(like.notifId);
+        await chrome.storage.local.set({ processedLikeNotifications: [...processed].slice(-2000) });
+      }
+    }
+    return true;
+  }
+
+  async function alStartLoop() {
+    if (alRunning) return;
+    alRunning = true;
+    while (true) {
+      const s = await alGetSettings();
+      if (!s.autoLikesEnabled) { alRunning = false; return; }
+      try { await alLoopOnce(); } catch (e) { console.warn("[AL]", e); }
+      // czekaj losowo MIN-MAX, ale reaguj na kick
+      const wait = alRand(s.autoLikesDelayNotifMin, s.autoLikesDelayNotifMax);
+      await new Promise(r => {
+        alKick = r;
+        setTimeout(r, wait);
+      });
+      alKick = null;
+    }
+  }
+
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.autoLikesEnabled) {
+      if (changes.autoLikesEnabled.newValue) alStartLoop();
+      else if (alKick) { try { alKick(); } catch {} }
+    }
+  });
+
   ensureExtensionSignedIn()
     .then(() => {
       syncToPanel().catch((e) => console.warn("[VM] sync err", e));
       setInterval(() => syncToPanel().catch(() => {}), 10 * 60 * 1000);
       runReplies();
       setInterval(runReplies, 5 * 60 * 1000);
+      alGetSettings().then((s) => { if (s.autoLikesEnabled) alStartLoop(); });
     })
     .catch(() => {});
+
 
   function injectSidebar() {
     if (document.getElementById("vm-sidebar-root")) return;
