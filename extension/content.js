@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.14";
+  const CONTENT_VERSION = "0.9.15";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -572,6 +572,7 @@
     autoLikesDelayNotifMax: 120000,
     autoLikesMsgDelayMin: 30000,
     autoLikesMsgDelayMax: 60000,
+    autoLikesMinGapMs: 8000,
     autoLikesTimeFilter: 0,
   };
 
@@ -744,46 +745,61 @@
 
   class AlSkipUser extends Error {}
 
+  function alIsRateLimit(e) {
+    const msg = String(e?.message || e);
+    return e?.status === 429
+      || e?.message_code === 'rate_limit_exceeded'
+      || msg.includes('rate_limit_exceeded')
+      || msg.includes('429');
+  }
+
+  function alIsUserBlocked(e) {
+    const msg = String(e?.message || e);
+    if (alIsRateLimit(e)) return false;
+    return (e?.status === 403 && (e?.code === 106 || e?.message_code === 'access_denied'))
+      || (msg.includes('403') && msg.includes('access_denied'));
+  }
+
   async function alCreateConversationSafe(itemId, userId, csrfToken) {
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 6; attempt++) {
       try {
         const r = await alCreateConversation(itemId, userId, csrfToken);
         if (r && r.message_code === 'rate_limit_exceeded') {
-          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/4) — czekam 90s...`);
-          await alSleep(alRand(90000, 120000));
+          const waitMin = 8 + attempt * 2;
+          await alPushStat(`⏳ Rate limit — czekam ${waitMin} min (próba ${attempt+1})...`);
+          await alSleep(alRand(waitMin * 60000, (waitMin + 3) * 60000));
           continue;
         }
         return r;
       } catch (e) {
         if (e instanceof AlSkipUser) throw e;
+
         if (e.captchaUrl) {
           const solved = await handleCaptchaIfNeeded({ captchaUrl: e.captchaUrl });
           if (solved) { await alSleep(alRand(1500, 3000)); continue; }
-          throw new AlSkipUser(`weryfikacja captcha nieukończona`);
+          throw new AlSkipUser(`weryfikacja nieukończona`);
         }
-        const msg = String(e?.message || e);
-        if (e.code === 106 || e.message_code === 'access_denied' || msg.includes('access_denied')) {
-          if (!alDiagShown) {
-            alDiagShown = true;
-            await alPushStat(`🔎 DIAGNOSTYKA (raz): status=${e.status} code=${e.code} msg_code=${e.message_code}`);
-            const sh = e.sentHeaders || {};
-            await alPushStat(`🔎 Wysłane nagłówki: ${Object.keys(sh).map(k => `${k}=${sh[k]}`).join(', ').slice(0,300)}`);
-            const rh = e.respHeaders || {};
-            const ddCookie = document.cookie.includes('datadome') ? 'JEST' : 'BRAK';
-            await alPushStat(`🔎 datadome cookie: ${ddCookie} | resp x-datadome: ${rh['x-datadome'] || rh['x-dd-b'] || 'brak'}`);
-            await alPushStat(`🔎 Body: ${(e.rawText || '').slice(0,200)}`);
-          }
+
+        if (alIsRateLimit(e)) {
+          const waitMin = 8 + attempt * 2;
+          await alPushStat(`⏳ Rate limit Vinted — czekam ${waitMin} min (próba ${attempt+1}/6)...`);
+          await alSleep(alRand(waitMin * 60000, (waitMin + 3) * 60000));
+          continue;
+        }
+
+        if (alIsUserBlocked(e)) {
           throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
         }
-        if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
-          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/4) — czekam 90s...`);
-          await alSleep(alRand(90000, 120000));
-          continue;
+
+        if (!alDiagShown) {
+          alDiagShown = true;
+          await alPushStat(`🔎 Nieznany błąd: status=${e.status} code=${e.code} msg_code=${e.message_code}`);
+          await alPushStat(`🔎 Body: ${(e.rawText || String(e.message || '')).slice(0,200)}`);
         }
         throw e;
       }
     }
-    throw new Error('Przekroczono liczbę prób');
+    throw new Error('Zbyt wiele prób rate limit — przerywam');
   }
 
   function alCalcDiscount(orig, amount, unit) {
@@ -908,6 +924,8 @@
           await alPushStat(`✗ ${like.login || like.userId}: ${errMsg}`);
         }
         alProcessedIds.add(like.notifId);
+        const curD = await alGetSettings();
+        await alSleep(Math.max(8000, alRand(curD.autoLikesMsgDelayMin, curD.autoLikesMsgDelayMax)));
       }
     }
 
