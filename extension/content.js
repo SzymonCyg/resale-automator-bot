@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.8";
+  const CONTENT_VERSION = "0.9.9";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -663,9 +663,12 @@
   }
 
   async function alCreateConversation(itemId, oppositeUserId, csrfToken) {
+    // Dotb: Referer musi być /inbox/want_it?receiver_id=X&item_id=Y (funkcja Noe), inaczej Vinted zwraca access_denied
+    const referrer = new URL(`/inbox/want_it?receiver_id=${oppositeUserId}&item_id=${itemId}`, window.location.origin).toString();
     return vintedApi(`/api/v2/conversations`, {
       method: "POST",
       csrfToken,
+      referrer,
       body: JSON.stringify({
         initiator: "seller_enters_notification",
         item_id: Number(itemId),
@@ -712,21 +715,28 @@
     return Math.max(1, Math.round((orig - amount) * 100) / 100);
   }
 
-  async function alSendOffer(transactionId, price, currency, csrfToken) {
+  async function alSendOffer(transactionId, price, currency, csrfToken, convId) {
+    const offerReferrer = convId
+      ? new URL(`/inbox/${convId}`, window.location.origin).toString()
+      : undefined;
     return vintedApi(`/api/v2/transactions/${transactionId}/offers`, {
       method: "POST",
       csrfToken,
+      referrer: offerReferrer,
       body: JSON.stringify({ offer: { price: String(price), currency } }),
     });
   }
 
   async function alSendReply(conversationId, body, csrfToken) {
+    // Dotb: Referer musi być /inbox/{conversationId} (funkcja Ya)
+    const replyReferrer = new URL(`/inbox/${conversationId}`, window.location.origin).toString();
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const r = await vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
           method: "POST",
           csrfToken,
-          body: JSON.stringify({ reply: { body } }),
+          referrer: replyReferrer,
+          body: JSON.stringify({ reply: { body, is_personal_data_sharing_check_skipped: false, photo_temp_uuids: null } }),
         });
         if (r && (r.message_code === 'rate_limit_exceeded' || (r.code === 106 && r.message_code !== 'access_denied'))) {
           await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
@@ -794,7 +804,7 @@
             if (txId && origPrice > 0) {
               const newP = alCalcDiscount(origPrice, cur.autoLikesDiscountAmount, cur.autoLikesDiscountUnit);
               try {
-                await alSendOffer(txId, newP, curCode, csrfToken);
+                await alSendOffer(txId, newP, curCode, csrfToken, conv?.id || conv?.conversation_id);
                 await alPushStat(`💸 oferta ${newP} ${curCode} → @${oppLogin}`);
               } catch (e) {
                 await alPushStat(`⚠ oferta @${oppLogin}: ${e.message}`);
