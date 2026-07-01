@@ -799,7 +799,7 @@ function readAutoLikesForm() {
     return Number.isFinite(v) && v > 0 ? v : def;
   };
   return {
-    autoLikesTemplate: $("#alTemplate").value || AL_DEFAULTS.autoLikesTemplate,
+    autoLikesTemplate: $("#alTemplate").value,
     autoLikesDiscount: $("#alDiscount").checked,
     autoLikesDiscountAmount: num("#alDiscountAmount", AL_DEFAULTS.autoLikesDiscountAmount),
     autoLikesDiscountUnit: $("#alDiscountUnit").value,
