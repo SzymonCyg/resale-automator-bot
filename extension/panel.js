@@ -258,11 +258,24 @@ function refreshPricePreviews() {
   });
 }
 
+const RELIST_DELAY_DEFAULTS = { relistDelayMin: 30, relistDelayMax: 45 };
+
 async function openRelist() {
   const chosen = items.filter((i) => selected.has(String(i.id)));
   $("#relistCount").textContent = chosen.length;
   $("#relistLog").innerHTML = "";
   $("#relistModal").classList.remove("hidden");
+
+  // load delay settings
+  const rd = await chrome.storage.local.get(Object.keys(RELIST_DELAY_DEFAULTS));
+  const rdMin = Number.isFinite(rd.relistDelayMin) ? rd.relistDelayMin : RELIST_DELAY_DEFAULTS.relistDelayMin;
+  const rdMax = Number.isFinite(rd.relistDelayMax) ? rd.relistDelayMax : RELIST_DELAY_DEFAULTS.relistDelayMax;
+  $("#relistDelayMin").value = rdMin;
+  $("#relistDelayMax").value = rdMax;
+  $("#relistDelayMinLabel").textContent = `${rdMin}s`;
+  $("#relistDelayMaxLabel").textContent = `${rdMax}s`;
+  initDualSlider("#relistDelayMin", "#relistDelayMax", "#relistDelayRange", "#relistDelayMinLabel", "#relistDelayMaxLabel");
+
 
   // reset modes
   photoMode = "auto"; priceMode = "keep";
@@ -634,14 +647,21 @@ $("#runRelist").addEventListener("click", async () => {
   if (!tab) return log("✗ Brak otwartej karty Vinted", "err");
   $("#runRelist").disabled = true;
 
+  const delayMin = parseInt($("#relistDelayMin").value) || RELIST_DELAY_DEFAULTS.relistDelayMin;
+  const delayMax = parseInt($("#relistDelayMax").value) || RELIST_DELAY_DEFAULTS.relistDelayMax;
+  const dMin = Math.min(delayMin, delayMax);
+  const dMax = Math.max(delayMin, delayMax);
+  try { await chrome.storage.local.set({ relistDelayMin: dMin, relistDelayMax: dMax }); } catch {}
+
   for (let idx = 0; idx < relistState.length; idx++) {
     const st = relistState[idx];
 
     if (idx > 0) {
-      const delaySec = Math.floor(15 + Math.random() * (300 - 15));
+      const delaySec = Math.floor(dMin + Math.random() * Math.max(1, dMax - dMin));
       log(`⏳ Czekam ${delaySec}s przed kolejnym ogłoszeniem...`);
       await new Promise(r => setTimeout(r, delaySec * 1000));
     }
+
 
     const finalPrice = computePrice(st);
     log(`→ ${st.title} (${finalPrice} ${st.currency})...`);
