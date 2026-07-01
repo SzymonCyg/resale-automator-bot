@@ -1001,16 +1001,7 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 // ========== THEME SYSTEM ==========
-let currentTheme = 'dark';
-
-async function detectVintedTheme() {
-  try {
-    const tab = await getVintedTab();
-    if (!tab) return null;
-    const r = await chrome.tabs.sendMessage(tab.id, { kind: 'GET_VINTED_THEME' }).catch(() => null);
-    return r?.theme || null;
-  } catch { return null; }
-}
+let currentTheme = 'light';
 
 async function applyTheme(theme) {
   currentTheme = theme;
@@ -1018,7 +1009,7 @@ async function applyTheme(theme) {
   document.body.classList.toggle('theme-dark', theme === 'dark');
   const btn = document.getElementById('themeToggle');
   if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
-  const stored = (await chrome.storage.local.get(['themeOverride'])).themeOverride || 'auto';
+  const stored = (await chrome.storage.local.get(['themeOverride'])).themeOverride || 'light';
   document.querySelectorAll('.theme-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.theme === stored)
   );
@@ -1026,27 +1017,14 @@ async function applyTheme(theme) {
 
 async function initTheme() {
   const { themeOverride } = await chrome.storage.local.get(['themeOverride']);
-  if (themeOverride === 'light' || themeOverride === 'dark') {
-    await applyTheme(themeOverride);
-    return;
-  }
-  const vintedTheme = await detectVintedTheme();
-  if (vintedTheme) { await applyTheme(vintedTheme); return; }
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  await applyTheme(prefersDark ? 'dark' : 'light');
+  await applyTheme(themeOverride === 'dark' ? 'dark' : 'light');
 }
 
 async function setThemeOverride(value) {
-  if (value === 'auto') {
-    await chrome.storage.local.remove(['themeOverride']);
-    await initTheme();
-  } else {
-    await chrome.storage.local.set({ themeOverride: value });
-    await applyTheme(value);
-  }
-  const stored = value === 'auto' ? 'auto' : value;
+  await chrome.storage.local.set({ themeOverride: value });
+  await applyTheme(value);
   document.querySelectorAll('.theme-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.theme === stored)
+    b.classList.toggle('active', b.dataset.theme === value)
   );
 }
 // ========== END THEME SYSTEM ==========
