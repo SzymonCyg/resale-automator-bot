@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vinted Manager Helper",
-  "version": "0.9.14",
+  "version": "0.9.15",
   "description": "Panel do zarz\u0105dzania kontami Vinted: podgl\u0105d przedmiot\u00f3w, ponowne wystawianie z edycj\u0105 zdj\u0119\u0107 i cen, auto-odpowiedzi.",
   "permissions": [
     "storage",
