@@ -730,6 +730,7 @@
     let totalLikes = 0;
 
     while (!stop) {
+      if (alInCooldown()) break;
       const { notifications, pagination } = await alFetchNotificationsPage(page);
       if (!notifications.length) break;
       totalNotifs += notifications.length;
