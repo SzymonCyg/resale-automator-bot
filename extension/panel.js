@@ -388,7 +388,11 @@ async function openRelist() {
   $$(".tile[data-price]").forEach((x) => x.classList.toggle("active", x.dataset.price === "keep"));
   $$(".tile[data-text]").forEach((x) => x.classList.toggle("active", x.dataset.text === "ai"));
   $("#percentBox").classList.add("hidden");
+  $("#amountBox").classList.add("hidden");
   $("#pricePercent").value = "";
+  $("#priceAmount").value = "";
+  const amtCur = document.getElementById("amountCurrency");
+  if (amtCur) amtCur.textContent = getCurrency();
 
   const tab = await getVintedTab();
   $("#relistSummary").textContent = "Wczytuję zdjęcia...";
