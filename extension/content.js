@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.10";
+  const CONTENT_VERSION = "0.9.11";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -545,7 +545,6 @@
   function alExtractLikeInfo(n) {
     const entryType = n?.entry_type ?? n?.entryType ?? n?.type;
     if (entryType !== 20 && entryType !== "20") return null;
-    // Vinted umieszcza id nadawcy/przedmiotu w parametrach linku powiadomienia
     let linkUserId = null, linkItemId = null;
     if (n?.link && typeof n.link === 'string') {
       const qs = n.link.includes('?') ? n.link.split('?')[1] : '';
@@ -555,7 +554,6 @@
     }
     const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject_id ?? n?.subject?.id ?? linkItemId;
     const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.notifier?.id ?? n?.actor?.id ?? linkUserId;
-    // Login znajduje się na początku treści powiadomienia
     const bodyLogin = (typeof n?.body === 'string' && n.body.trim()) ? n.body.trim().split(/\s+/)[0] : null;
     const login = n?.notifier?.login ?? n?.user?.login ?? n?.actor?.login ?? bodyLogin ?? null;
     const updatedAt = n?.updated_at ?? n?.created_at ?? n?.time ?? null;
@@ -663,7 +661,6 @@
   }
 
   async function alCreateConversation(itemId, oppositeUserId, csrfToken) {
-    // Vinted wymaga nagłówka Referer wskazującego na stronę rozpoczęcia rozmowy, inaczej zwraca access_denied
     const referrer = new URL(`/inbox/want_it?receiver_id=${oppositeUserId}&item_id=${itemId}`, window.location.origin).toString();
     return vintedApi(`/api/v2/conversations`, {
       method: "POST",
@@ -677,14 +674,12 @@
     });
   }
 
-  // Sygnalizuje że użytkownik zablokował lub ogłoszenie jest niedostępne — pomijamy bez ponawiania
   class AlSkipUser extends Error {}
 
   async function alCreateConversationSafe(itemId, userId, csrfToken) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const r = await alCreateConversation(itemId, userId, csrfToken);
-        // 403 z kodem 106 = użytkownik zablokował lub ogłoszenie nieaktywne → pomiń
         if (r && r.code === 106) throw new AlSkipUser('blocked_or_inactive');
         if (r && r.message_code === 'access_denied') throw new AlSkipUser('blocked_or_inactive');
         if (r && r.message_code === 'rate_limit_exceeded') {
@@ -728,7 +723,6 @@
   }
 
   async function alSendReply(conversationId, body, csrfToken) {
-    // Vinted wymaga nagłówka Referer wskazującego na stronę konwersacji
     const replyReferrer = new URL(`/inbox/${conversationId}`, window.location.origin).toString();
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
