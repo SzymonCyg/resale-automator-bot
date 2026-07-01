@@ -700,8 +700,8 @@
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const r = await alCreateConversation(itemId, userId, csrfToken);
-        if (r && r.code === 106) throw new AlSkipUser('blocked_or_inactive');
-        if (r && r.message_code === 'access_denied') throw new AlSkipUser('blocked_or_inactive');
+        if (r && r.code === 106) throw new AlSkipUser(`zablokowany/nieaktywny (kod 106)`);
+        if (r && r.message_code === 'access_denied') throw new AlSkipUser(`brak dostępu (${r.message || 'access_denied'})`);
         if (r && r.message_code === 'rate_limit_exceeded') {
           await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
@@ -712,7 +712,7 @@
         if (e instanceof AlSkipUser) throw e;
         const msg = String(e?.message || e);
         if (msg.includes('access_denied') || (msg.includes('403') && msg.includes('106'))) {
-          throw new AlSkipUser('blocked_or_inactive');
+          throw new AlSkipUser(`brak dostępu (${msg.slice(0,120)})`);
         }
         if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
           await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
