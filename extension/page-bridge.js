@@ -128,6 +128,65 @@
         return;
       }
 
+      if (msg.kind === "SOLVE_CAPTCHA") {
+        const captchaUrl = msg.captchaUrl;
+        const timeout = msg.timeout || 120000;
+        const CAPTCHA_ORIGIN = "https://geo.captcha-delivery.com";
+        const result = await new Promise((resolve) => {
+          const containerId = `vm-dd-captcha-${Date.now()}`;
+          const container = document.createElement("div");
+          container.id = containerId;
+          Object.assign(container.style, {
+            height: "100vh", width: "100%", position: "fixed",
+            top: "0", left: "0", zIndex: "2147483647", backgroundColor: "#ffffff",
+          });
+          const banner = document.createElement("div");
+          Object.assign(banner.style, {
+            position: "fixed", top: "0", left: "0", width: "100%", padding: "10px 16px",
+            background: "#0f1420", color: "#5eead4", fontFamily: "system-ui, sans-serif",
+            fontSize: "14px", fontWeight: "600", zIndex: "2147483647", boxSizing: "border-box",
+          });
+          banner.textContent = "Vinted prosi o weryfikację — rozwiąż captchę aby kontynuować automatyzację";
+          const iframe = document.createElement("iframe");
+          iframe.src = captchaUrl;
+          iframe.width = "100%";
+          iframe.height = "100%";
+          iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
+          iframe.setAttribute("allow", "accelerometer; gyroscope; magnetometer");
+          iframe.setAttribute("frameborder", "0");
+          Object.assign(iframe.style, { height: "100vh", width: "100%", border: "0", marginTop: "40px" });
+          container.appendChild(banner);
+          container.appendChild(iframe);
+
+          let timer;
+          function cleanup() {
+            clearTimeout(timer);
+            window.removeEventListener("message", onMsg);
+            container.remove();
+          }
+          function onMsg(ev) {
+            if (ev.origin !== CAPTCHA_ORIGIN) return;
+            try {
+              const data = JSON.parse(ev.data);
+              if (data.responseType === "hardblock") { cleanup(); resolve({ solved: false, hardblock: true }); }
+              else if (data.eventType === "passed") {
+                if (data.cookie) { try { document.cookie = data.cookie; } catch {} }
+                cleanup();
+                resolve({ solved: true });
+              }
+            } catch {}
+          }
+          timer = setTimeout(() => { cleanup(); resolve({ solved: false, timeout: true }); }, timeout);
+          window.addEventListener("message", onMsg);
+          document.body.insertAdjacentElement("afterbegin", container);
+        });
+        window.postMessage(
+          { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: result },
+          window.location.origin,
+        );
+        return;
+      }
+
       if (msg.kind !== "FETCH") return;
 
       const init = msg.init || {};
