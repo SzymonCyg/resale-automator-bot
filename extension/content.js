@@ -587,6 +587,42 @@
     return { id: newId, mode: "publish" };
   }
 
+  async function publishExistingDraft(id) {
+    await ensureExtensionSignedIn();
+    const csrfToken = readCsrfToken();
+    const detail = await fetchItemDetail(id);
+    if (!detail) throw new Error("Nie znaleziono szkicu");
+    const photosArr = Array.isArray(detail.photos) ? detail.photos : [];
+    const assignedPhotos = photosArr.map(p => ({ id: p.id, orientation: p.orientation ?? 0 }));
+    const photoIds = assignedPhotos.map(p => p.id).filter(Boolean);
+    if (!photoIds.length) throw new Error("Szkic nie ma zdjęć — dodaj je najpierw na Vinted");
+    const price = Number(detail?.price?.amount ?? detail?.price ?? 0);
+    if (!(price > 0)) throw new Error("Szkic nie ma ustawionej ceny");
+    const currency = detail.currency || detail?.price?.currency_code || "PLN";
+    const payload = buildDraft({
+      original: detail,
+      price,
+      currency,
+      photoIds,
+      tempUuid: detail.temp_uuid || newUuid(),
+      assignedPhotos,
+    });
+    payload.id = id;
+    try {
+      const completedRes = await vintedApi(`/api/v2/item_upload/drafts/${id}/completion`, {
+        method: "POST",
+        csrfToken,
+        body: JSON.stringify({ draft: payload, feedback_id: null, parcel: null, push_up: false, upload_session_id: payload.temp_uuid }),
+      });
+      const newId = completedRes?.item?.id ?? completedRes?.id ?? id;
+      return { id: newId };
+    } catch (e) {
+      const msg = String(e?.message || e || "");
+      if (/429|rate.?limit/i.test(msg)) throw new Error("Rate limit — spróbuj za chwilę");
+      throw new Error("Publikacja szkicu nie powiodła się: " + msg);
+    }
+  }
+
   function matchRule(text, rule) {
     if (!text || !rule?.pattern) return false;
     const t = text.toLowerCase(), p = rule.pattern.toLowerCase();
