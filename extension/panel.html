@@ -52,10 +52,16 @@
           <div class="left">
             <button id="refreshItems" class="btn">↻ Odśwież</button>
             <button id="syncItems" class="btn">☁ Synchronizuj do panelu</button>
+            <select id="filterStatus" class="btn ghost" style="padding:6px 10px">
+              <option value="all">Wszystkie</option>
+              <option value="active">Aktywne</option>
+              <option value="inactive">Nieaktywne</option>
+            </select>
             <span id="itemsStatus" class="muted"></span>
           </div>
           <div class="right">
             <span id="selCount" class="muted">0 zaznaczonych</span>
+            <button id="deleteBtn" class="btn danger" disabled>🗑 Usuń zaznaczone</button>
             <button id="relistBtn" class="btn primary" disabled>Wystaw ponownie</button>
           </div>
         </div>

@@ -153,13 +153,28 @@ async function loadItems() {
   }
 }
 
+let filterStatus = "all";
+
+function isActiveStatus(it) {
+  const s = it.status;
+  return s === "active" || s === "visible" || s === "1" || s === 1;
+}
+
+function getFilteredItems() {
+  if (filterStatus === "active") return items.filter(isActiveStatus);
+  if (filterStatus === "inactive") return items.filter((it) => !isActiveStatus(it));
+  return items;
+}
+
 function renderItems() {
   const body = $("#itemsBody");
-  if (!items.length) {
+  const filtered = getFilteredItems();
+  if (!filtered.length) {
     body.innerHTML = `<tr><td colspan="8" class="empty">Brak przedmiotów.</td></tr>`;
+    updateSel();
     return;
   }
-  body.innerHTML = items.map((it) => `
+  body.innerHTML = filtered.map((it) => `
     <tr data-id="${it.id}">
       <td><input type="checkbox" class="sel" data-id="${it.id}" ${selected.has(String(it.id)) ? "checked" : ""}/></td>
       <td>${it.photo_url ? `<img class="thumb" src="${it.photo_url}" />` : `<div class="thumb"></div>`}</td>
@@ -177,11 +192,14 @@ function renderItems() {
       updateSel();
     }),
   );
+  updateSel();
 }
 
 function updateSel() {
   $("#selCount").textContent = `${selected.size} zaznaczonych`;
   $("#relistBtn").disabled = !extensionSignedIn || selected.size === 0;
+  const del = $("#deleteBtn");
+  if (del) del.disabled = !extensionSignedIn || selected.size === 0;
 }
 
 function escapeHtml(s) {
@@ -203,9 +221,46 @@ $("#syncItems").addEventListener("click", async () => {
 });
 $("#selAll").addEventListener("change", (e) => {
   const checked = e.target.checked;
-  items.forEach((it) => (checked ? selected.add(String(it.id)) : selected.delete(String(it.id))));
+  getFilteredItems().forEach((it) => (checked ? selected.add(String(it.id)) : selected.delete(String(it.id))));
   renderItems();
   updateSel();
+});
+$("#filterStatus").addEventListener("change", (e) => {
+  filterStatus = e.target.value;
+  renderItems();
+});
+$("#deleteBtn").addEventListener("click", async () => {
+  if (!selected.size) return;
+  const count = selected.size;
+  if (!confirm(`Czy na pewno chcesz usunąć ${count} przedmiot(ów)? Tej akcji nie można cofnąć.`)) return;
+  const tab = await getVintedTab();
+  if (!tab) { $("#itemsStatus").textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
+  const btn = $("#deleteBtn");
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = "Usuwam...";
+  let deleted = 0, errors = 0;
+  for (const id of [...selected]) {
+    try {
+      const r = await vintedMsg(tab.id, { kind: "DELETE_ITEM_V2", id });
+      if (r?.ok) {
+        deleted++;
+        items = items.filter((it) => String(it.id) !== String(id));
+        selected.delete(id);
+      } else {
+        errors++;
+        console.warn("Delete failed:", id, r?.error);
+      }
+    } catch (e) {
+      errors++;
+      console.warn("Delete error:", id, e.message);
+    }
+    await new Promise((r) => setTimeout(r, 800));
+  }
+  renderItems();
+  updateSel();
+  btn.textContent = orig;
+  $("#itemsStatus").textContent = `Usunięto ${deleted} przedmiotów${errors ? `, błędy: ${errors}` : ""}`;
 });
 
 // ---------- RELIST ----------
@@ -617,29 +672,11 @@ async function exportPhoto(p, mode) {
 }
 
 async function paraphraseWithAI(title, description) {
-  const prompt = `Jesteś pomocnikiem sprzedawcy na Vinted. Przepisz tytuł i opis ogłoszenia tak, aby miały to samo znaczenie, ale były wyrażone nieco innymi słowami (drobne zmiany synonimów, kolejność słów, ewentualnie skróty). Tytuł musi być krótki (max 60 znaków). Nie zmieniaj informacji o marce, rozmiarze, stanie ani cenie.
-
-Tytuł: ${title}
-Opis: ${description || "(brak opisu)"}
-
-Odpowiedz TYLKO w formacie JSON (bez żadnego tekstu poza JSON):
-{"title": "...", "description": "..."}`;
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  if (!response.ok) throw new Error(`AI API ${response.status}`);
-  const data = await response.json();
-  const text = data.content?.find(b => b.type === "text")?.text || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  const r = await new Promise((resolve) =>
+    chrome.runtime.sendMessage({ kind: "PARAPHRASE_AI", title, description }, resolve),
+  );
+  if (!r?.ok) throw new Error(r?.error || "AI niedostępne");
+  return { title: r.title, description: r.description };
 }
 
 $("#runRelist").addEventListener("click", async () => {
