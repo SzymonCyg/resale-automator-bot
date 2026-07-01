@@ -672,29 +672,11 @@ async function exportPhoto(p, mode) {
 }
 
 async function paraphraseWithAI(title, description) {
-  const prompt = `Jesteś pomocnikiem sprzedawcy na Vinted. Przepisz tytuł i opis ogłoszenia tak, aby miały to samo znaczenie, ale były wyrażone nieco innymi słowami (drobne zmiany synonimów, kolejność słów, ewentualnie skróty). Tytuł musi być krótki (max 60 znaków). Nie zmieniaj informacji o marce, rozmiarze, stanie ani cenie.
-
-Tytuł: ${title}
-Opis: ${description || "(brak opisu)"}
-
-Odpowiedz TYLKO w formacie JSON (bez żadnego tekstu poza JSON):
-{"title": "...", "description": "..."}`;
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  if (!response.ok) throw new Error(`AI API ${response.status}`);
-  const data = await response.json();
-  const text = data.content?.find(b => b.type === "text")?.text || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  const r = await new Promise((resolve) =>
+    chrome.runtime.sendMessage({ kind: "PARAPHRASE_AI", title, description }, resolve),
+  );
+  if (!r?.ok) throw new Error(r?.error || "AI niedostępne");
+  return { title: r.title, description: r.description };
 }
 
 $("#runRelist").addEventListener("click", async () => {
