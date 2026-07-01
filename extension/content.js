@@ -892,37 +892,30 @@
 
   async function alSendReply(conversationId, body, csrfToken) {
     const replyReferrer = new URL(`/inbox/${conversationId}`, window.location.origin).toString();
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const r = await vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
-          method: "POST",
-          csrfToken,
-          referrer: replyReferrer,
-          body: JSON.stringify({ reply: { body, is_personal_data_sharing_check_skipped: false, photo_temp_uuids: null } }),
-        });
-        if (r && (r.message_code === 'rate_limit_exceeded' || (r.code === 106 && r.message_code !== 'access_denied'))) {
-          await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
-          await alSleep(alRand(90000, 120000));
-          continue;
-        }
-        if (r && r.message_code === 'access_denied') {
-          throw new Error(`access_denied: brak dostępu do konwersacji`);
-        }
-        return r;
-      } catch (e) {
-        const msg = String(e?.message || e);
-        if (msg.includes('access_denied') || (msg.includes('403') && !msg.includes('429'))) {
-          throw e;
-        }
-        if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
-          await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
-          await alSleep(alRand(90000, 120000));
-          continue;
-        }
-        throw e;
+    let r;
+    try {
+      r = await vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
+        method: "POST",
+        csrfToken,
+        referrer: replyReferrer,
+        body: JSON.stringify({ reply: { body, is_personal_data_sharing_check_skipped: false, photo_temp_uuids: null } }),
+      });
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
+        const mins = alSetCooldown(8, 12);
+        throw new AlRateLimited(`Rate limit — wznowię za ~${mins} min`);
       }
+      throw e;
     }
-    throw new Error('Przekroczono liczbę prób');
+    if (r && r.message_code === 'rate_limit_exceeded') {
+      const mins = alSetCooldown(8, 12);
+      throw new AlRateLimited(`Rate limit — wznowię za ~${mins} min`);
+    }
+    if (r && r.message_code === 'access_denied') {
+      throw new Error(`access_denied: brak dostępu do konwersacji`);
+    }
+    return r;
   }
 
   let alRunning = false;
