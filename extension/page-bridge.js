@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "0.9.13";
+  const BRIDGE_VERSION = "0.9.14";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -53,7 +53,7 @@
     return null;
   }
 
-  async function toPayload(response) {
+  async function toPayload(response, requestHeaders) {
     const text = await response.text();
     let json = null;
     try {
@@ -61,6 +61,14 @@
     } catch {
       json = null;
     }
+    const respHeaders = {};
+    try {
+      for (const [k, v] of response.headers.entries()) respHeaders[k] = v;
+    } catch {}
+    const sentHeaders = {};
+    try {
+      if (requestHeaders) for (const [k, v] of requestHeaders.entries()) sentHeaders[k] = (k.toLowerCase().includes("csrf") || k.toLowerCase().includes("anon")) ? (v ? v.slice(0,8) + "…" : "") : v;
+    } catch {}
     return {
       ok: response.ok,
       status: response.status,
@@ -71,6 +79,8 @@
       json,
       contentType: response.headers.get("content-type") || "",
       captchaUrl: response.status === 403 ? detectCaptchaUrl(json, text) : null,
+      respHeaders,
+      sentHeaders,
     };
   }
 
@@ -204,9 +214,11 @@
         if (urlOrigin !== window.location.origin) fetchMode = "cors";
       } catch {}
 
+      let lastHeaders = headers;
       const doFetch = (extraHeaders) => {
         const h = new Headers(headers);
         if (extraHeaders) for (const [k, v] of Object.entries(extraHeaders)) h.set(k, v);
+        lastHeaders = h;
         return fetch(url, {
           ...init,
           headers: h,
@@ -238,7 +250,7 @@
       }
 
       window.postMessage(
-        { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: await toPayload(response) },
+        { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: await toPayload(response, lastHeaders) },
         window.location.origin,
       );
     } catch (error) {

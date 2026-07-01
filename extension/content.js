@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.13";
+  const CONTENT_VERSION = "0.9.14";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -102,6 +102,7 @@
 
   let alCaptchaInProgress = false;
   let alCaptchaLastFailAt = 0;
+  let alDiagShown = false;
 
   function solveCaptchaViaBridge(captchaUrl) {
     return bridgeRequest("SOLVE_CAPTCHA", { captchaUrl, timeout: 180000 }, 190000);
@@ -733,6 +734,9 @@
       err.code = res?.json?.code;
       err.message_code = res?.json?.message_code;
       err.captchaUrl = res?.captchaUrl;
+      err.respHeaders = res?.respHeaders;
+      err.sentHeaders = res?.sentHeaders;
+      err.rawText = res?.text;
       throw err;
     }
     return res.json;
@@ -759,6 +763,16 @@
         }
         const msg = String(e?.message || e);
         if (e.code === 106 || e.message_code === 'access_denied' || msg.includes('access_denied')) {
+          if (!alDiagShown) {
+            alDiagShown = true;
+            await alPushStat(`🔎 DIAGNOSTYKA (raz): status=${e.status} code=${e.code} msg_code=${e.message_code}`);
+            const sh = e.sentHeaders || {};
+            await alPushStat(`🔎 Wysłane nagłówki: ${Object.keys(sh).map(k => `${k}=${sh[k]}`).join(', ').slice(0,300)}`);
+            const rh = e.respHeaders || {};
+            const ddCookie = document.cookie.includes('datadome') ? 'JEST' : 'BRAK';
+            await alPushStat(`🔎 datadome cookie: ${ddCookie} | resp x-datadome: ${rh['x-datadome'] || rh['x-dd-b'] || 'brak'}`);
+            await alPushStat(`🔎 Body: ${(e.rawText || '').slice(0,200)}`);
+          }
           throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
         }
         if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
