@@ -340,9 +340,10 @@ async function openRelist() {
 
 
   // reset modes
-  photoMode = "auto"; priceMode = "keep";
+  photoMode = "auto"; priceMode = "keep"; textMode = "ai";
   $$(".tile[data-photo]").forEach((x) => x.classList.toggle("active", x.dataset.photo === "auto"));
   $$(".tile[data-price]").forEach((x) => x.classList.toggle("active", x.dataset.price === "keep"));
+  $$(".tile[data-text]").forEach((x) => x.classList.toggle("active", x.dataset.text === "ai"));
   $("#percentBox").classList.add("hidden");
   $("#pricePercent").value = "";
 
