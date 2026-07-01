@@ -69,8 +69,28 @@
             <span id="selCount" class="muted">0 zaznaczonych</span>
             <button id="deleteBtn" class="btn danger" disabled>🗑 Usuń zaznaczone</button>
             <button id="relistBtn" class="btn primary" disabled>Wystaw ponownie</button>
+            <button id="publishDraftsBtn" class="btn primary hidden">Wystaw zaznaczone szkice</button>
           </div>
         </div>
+
+        <div id="publishDelayRow" class="al-row hidden" style="margin:8px 0">
+          <label class="al-label">Opóźnienie między publikacjami</label>
+          <div class="al-slider-wrap">
+            <div class="al-slider-labels">
+              <span id="publishDelayMinLabel">30s</span>
+              <span class="muted">–</span>
+              <span id="publishDelayMaxLabel">60s</span>
+            </div>
+            <div class="al-dual-slider" id="publishDelaySlider">
+              <div class="slider-track"></div>
+              <div class="slider-range" id="publishDelayRange"></div>
+              <input type="range" class="slider-min" id="publishDelayMin" min="15" max="300" step="1" value="30" />
+              <input type="range" class="slider-max" id="publishDelayMax" min="15" max="300" step="1" value="60" />
+            </div>
+            <div class="al-slider-limits"><span>15s</span><span>300s</span></div>
+          </div>
+        </div>
+        <div id="publishDraftsLog" class="log hidden" style="margin-top:8px"></div>
 
         <div class="table-wrap">
           <table id="itemsTable">
