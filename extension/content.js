@@ -711,9 +711,9 @@
     return collected;
   }
 
-  async function alCreateConversation(itemId, oppositeUserId, csrfToken) {
+  async function alCreateConversationRaw(itemId, oppositeUserId, csrfToken) {
     const referrer = new URL(`/inbox/want_it?receiver_id=${oppositeUserId}&item_id=${itemId}`, window.location.origin).toString();
-    return vintedApi(`/api/v2/conversations`, {
+    return vintedRaw(`/api/v2/conversations`, {
       method: "POST",
       csrfToken,
       referrer,
@@ -723,6 +723,19 @@
         opposite_user_id: Number(oppositeUserId),
       }),
     });
+  }
+
+  async function alCreateConversation(itemId, oppositeUserId, csrfToken) {
+    const res = await alCreateConversationRaw(itemId, oppositeUserId, csrfToken);
+    if (!res?.ok) {
+      const err = new Error(`Vinted ${res?.status}${res?.text ? `: ${res.text.slice(0,250)}` : ""}`);
+      err.status = res?.status;
+      err.code = res?.json?.code;
+      err.message_code = res?.json?.message_code;
+      err.captchaUrl = res?.captchaUrl;
+      throw err;
+    }
+    return res.json;
   }
 
   class AlSkipUser extends Error {}
