@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.17";
+  const CONTENT_VERSION = "0.9.18";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -931,7 +931,6 @@
         const msgs = conv?.messages || [];
         if (msgs.length > 0) {
           alProcessedIds.add(like.notifId);
-          await alPushStat(`⚠ pominięto @${oppLogin} (już była konwersacja)`);
         } else {
           if (cur.autoLikesDiscount) {
             const txId = conv?.transaction?.id || conv?.transaction_id;
@@ -959,7 +958,7 @@
           if (convId && body) {
             await alSendReply(convId, body, csrfToken);
             alProcessedIds.add(like.notifId);
-            await alPushStat(`✓ wiadomość → @${oppLogin}`, 1);
+            await alPushStat(`✓ Wiadomość wysłana → @${oppLogin}`, 1);
           }
         }
         if (!alLatestId || Number(like.notifId) > Number(alLatestId)) {
@@ -969,11 +968,9 @@
         const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
         await alSleep(msgDelay);
       } catch (e) {
-        if (e instanceof AlSkipUser) {
-          await alPushStat(`⊘ pominięto @${like.login || like.userId} — ${e.message || 'brak dostępu'}`);
-        } else {
+        if (!(e instanceof AlSkipUser)) {
           const errMsg = e.message || String(e);
-          await alPushStat(`✗ ${like.login || like.userId}: ${errMsg}`);
+          await alPushStat(`✗ Przerwano dla @${like.login || like.userId}: ${errMsg}`);
         }
         alProcessedIds.add(like.notifId);
         const curD = await alGetSettings();
