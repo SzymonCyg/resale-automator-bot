@@ -207,6 +207,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (msg.kind === "PARAPHRASE_AI") {
+    (async () => {
+      try {
+        const apiKey = "__ANTHROPIC_API_KEY__";
+        if (!apiKey || apiKey === "BRAK_KLUCZA" || apiKey.startsWith("__")) {
+          throw new Error("Brak klucza ANTHROPIC_API_KEY");
+        }
+        const prompt = `Jesteś pomocnikiem sprzedawcy na Vinted. Przepisz tytuł i opis ogłoszenia tak, aby miały to samo znaczenie, ale były wyrażone nieco innymi słowami (drobne zmiany synonimów, kolejność słów, skróty). Tytuł musi być krótki (max 60 znaków). Nie zmieniaj informacji o marce, rozmiarze, stanie ani cenie. Odpowiedz TYLKO w formacie JSON bez żadnego tekstu poza JSON:\n{"title": "...", "description": "..."}\n\nTytuł: ${msg.title}\nOpis: ${msg.description || "(brak opisu)"}`;
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 500,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
+        if (!res.ok) throw new Error(`AI API ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        const text = data.content?.find((b) => b.type === "text")?.text || "";
+        const clean = text.replace(/```json|```/g, "").trim();
+        const parsed = JSON.parse(clean);
+        sendResponse({ ok: true, title: parsed.title, description: parsed.description });
+      } catch (e) {
+        console.warn("[Vinted Manager] PARAPHRASE_AI:", e);
+        sendResponse({ ok: false, error: e.message });
+      }
+    })();
+    return true;
+  }
 });
 
 // Wiadomość ze strony panelu (Google login → przekazanie sesji)
