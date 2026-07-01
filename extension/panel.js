@@ -270,6 +270,7 @@ $("#cancelRelist").addEventListener("click", closeRelist);
 
 let photoMode = "auto";   // 'auto' | 'manual'
 let priceMode = "keep";   // 'keep' | 'percent'
+let textMode  = "ai";     // 'ai' | 'keep'
 
 $$(".tile[data-photo]").forEach((t) =>
   t.addEventListener("click", () => {
@@ -284,6 +285,12 @@ $$(".tile[data-price]").forEach((t) =>
     priceMode = t.dataset.price;
     $("#percentBox").classList.toggle("hidden", priceMode !== "percent");
     refreshPricePreviews();
+  }),
+);
+$$(".tile[data-text]").forEach((t) =>
+  t.addEventListener("click", () => {
+    $$(".tile[data-text]").forEach((x) => x.classList.toggle("active", x === t));
+    textMode = t.dataset.text;
   }),
 );
 $("#pricePercent").addEventListener("input", refreshPricePreviews);
@@ -333,9 +340,10 @@ async function openRelist() {
 
 
   // reset modes
-  photoMode = "auto"; priceMode = "keep";
+  photoMode = "auto"; priceMode = "keep"; textMode = "ai";
   $$(".tile[data-photo]").forEach((x) => x.classList.toggle("active", x.dataset.photo === "auto"));
   $$(".tile[data-price]").forEach((x) => x.classList.toggle("active", x.dataset.price === "keep"));
+  $$(".tile[data-text]").forEach((x) => x.classList.toggle("active", x.dataset.text === "ai"));
   $("#percentBox").classList.add("hidden");
   $("#pricePercent").value = "";
 
@@ -671,12 +679,26 @@ async function exportPhoto(p, mode) {
   return await c.convertToBlob({ type: "image/jpeg", quality: 0.92 });
 }
 
-async function paraphraseWithAI(title, description) {
-  const r = await new Promise((resolve) =>
-    chrome.runtime.sendMessage({ kind: "PARAPHRASE_AI", title, description }, resolve),
-  );
-  if (!r?.ok) throw new Error(r?.error || "AI niedostępne");
-  return { title: r.title, description: r.description };
+async function paraphraseWithAI(title, description, language) {
+  const { session, supabaseUrl, supabaseAnonKey } = await chrome.storage.local.get([
+    "session", "supabaseUrl", "supabaseAnonKey",
+  ]);
+  const base = supabaseUrl || "https://vdkxhhgoloiylkscessp.supabase.co";
+  const token = session?.access_token || "";
+  const anon = supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZka3hoaGdvbG9peWxrc2Nlc3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NjYxMjUsImV4cCI6MjA5ODI0MjEyNX0.ZQzRkY2Utf405okkc0b-JJK2zXW40C0EM9XxlzWUOek";
+  const res = await fetch(`${base}/functions/v1/paraphrase-text`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token || anon}`,
+      "apikey": anon,
+    },
+    body: JSON.stringify({ title, description: description || "", language: language || "pl" }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return { title: data.title || title, description: data.description || description };
 }
 
 $("#runRelist").addEventListener("click", async () => {
@@ -705,15 +727,22 @@ $("#runRelist").addEventListener("click", async () => {
     try {
       let aiTitle = st.title;
       let aiDesc = st.description;
-      try {
-        const aiResult = await paraphraseWithAI(st.title, st.description);
-        if (aiResult) {
-          aiTitle = aiResult.title || st.title;
-          aiDesc = aiResult.description || st.description;
-          log(`🤖 Tytuł: "${aiTitle}"`);
+      if (textMode === "ai") {
+        try {
+          const lang = st.currency === 'PLN' ? 'pl'
+            : st.currency === 'GBP' ? 'en'
+            : st.currency === 'CZK' ? 'cs'
+            : st.currency === 'EUR' ? 'de'
+            : 'pl';
+          const aiResult = await paraphraseWithAI(st.title, st.description, lang);
+          if (aiResult) {
+            aiTitle = aiResult.title || st.title;
+            aiDesc = aiResult.description || st.description;
+            log(`🤖 Tytuł: "${aiTitle}"`);
+          }
+        } catch (aiErr) {
+          log(`⚠ AI niedostępne (${aiErr.message}) — używam oryginału`, "");
         }
-      } catch (aiErr) {
-        log(`⚠ AI niedostępne — używam oryginału`, "");
       }
 
       const photos = [];
