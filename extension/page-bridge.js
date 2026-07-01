@@ -136,15 +136,38 @@
         if (urlOrigin !== window.location.origin) fetchMode = "cors";
       } catch {}
 
-      const response = await fetch(url, {
-        ...init,
-        headers,
-        credentials: "include",
-        mode: fetchMode,
-        cache: init.cache || "no-store",
-        referrer: init.referrer,
-        referrerPolicy: init.referrer ? "unsafe-url" : undefined,
-      });
+      const doFetch = (extraHeaders) => {
+        const h = new Headers(headers);
+        if (extraHeaders) for (const [k, v] of Object.entries(extraHeaders)) h.set(k, v);
+        return fetch(url, {
+          ...init,
+          headers: h,
+          credentials: "include",
+          mode: fetchMode,
+          cache: init.cache || "no-store",
+          referrer: init.referrer,
+          referrerPolicy: init.referrer ? "unsafe-url" : undefined,
+        });
+      };
+
+      let response = await doFetch();
+
+      if ((response.status === 401 || response.status === 403) && (init.method && init.method !== "GET")) {
+        try {
+          delete window.__VM_CSRF_TOKEN__;
+          window.csrfTokenCache = null;
+          await fetch(new URL("/web/api/auth/refresh", window.location.origin).toString(), {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+          }).catch(() => {});
+          const freshCsrf = extractCsrfFromScripts() || readCsrfToken();
+          if (freshCsrf) {
+            window.__VM_CSRF_TOKEN__ = freshCsrf;
+            response = await doFetch({ "X-CSRF-Token": freshCsrf });
+          }
+        } catch {}
+      }
 
       window.postMessage(
         { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: await toPayload(response) },
