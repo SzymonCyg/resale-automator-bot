@@ -1237,6 +1237,10 @@ function importValidateRow(it) {
   if (!it.title || !String(it.title).trim()) w.push("brak tytułu");
   if (!(Number(it.price) > 0)) w.push("cena");
   if (!it.photos || it.photos.length === 0) w.push("brak zdjęć");
+  if (!it.brand_id) w.push("brak Marka_ID");
+  if (!it.size_id) w.push("brak Rozmiar_ID");
+  if (!it.status_id) w.push("brak Stan_ID");
+  if (!it.catalog_id) w.push("brak Kategoria_ID");
   return w;
 }
 
@@ -1258,12 +1262,14 @@ function renderImportPreview() {
       <td>${importEscapeHtml(it.price)} ${importEscapeHtml(it.currency)}</td>
       <td>${importEscapeHtml(it.brand)}</td>
       <td>${importEscapeHtml(it.size_title)}</td>
+      <td>${importEscapeHtml(it.status_label)}</td>
+      <td>${importEscapeHtml(it.catalog_title)}</td>
       <td style="text-align:center">${it.photos.length}</td>
     </tr>`;
   }).join("");
   box.innerHTML = `<table class="tbl" style="width:100%;border-collapse:collapse">
     <thead><tr>
-      <th></th><th>Miniatura</th><th>Tytuł</th><th>Cena</th><th>Marka</th><th>Rozmiar</th><th>Zdjęć</th>
+      <th></th><th>Miniatura</th><th>Tytuł</th><th>Cena</th><th>Marka</th><th>Rozmiar</th><th>Stan</th><th>Kategoria</th><th>Zdjęć</th>
     </tr></thead><tbody>${rows}</tbody></table>`;
 }
 
@@ -1279,21 +1285,34 @@ async function handleImportParse() {
     const wb = XLSX.read(data, { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const raw = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    const numOrNull = (v) => { const n = Number(String(v).replace(",", ".")); return Number.isFinite(n) && n > 0 ? n : null; };
     importItems = raw.map(r => {
       const photoKeys = Object.keys(r)
         .filter(k => /^Zdjęcie_\d+$/.test(k))
         .sort((a, b) => Number(a.split("_")[1]) - Number(b.split("_")[1]));
       const photos = photoKeys.map(k => r[k]).filter(v => typeof v === "string" && v.trim());
+      const colorIds = String(r["Kolor_ID"] || "")
+        .split(/[,;]/).map(s => Number(s.trim())).filter(n => Number.isFinite(n) && n > 0);
       return {
         id: r["ID"] || "",
         title: r["Tytuł"] || "",
+        description: r["Opis"] || "",
         brand: r["Marka"] || "",
+        brand_id: numOrNull(r["Marka_ID"]),
         size_title: r["Rozmiar"] || "",
+        size_id: numOrNull(r["Rozmiar_ID"]),
+        status_label: r["Stan"] || "",
+        status_id: numOrNull(r["Stan_ID"]),
+        catalog_title: r["Kategoria"] || "",
+        catalog_id: numOrNull(r["Kategoria_ID"]),
+        color: r["Kolor"] || "",
+        color_ids: colorIds,
+        package_size_id: numOrNull(r["Paczka_ID"]),
         price: Number(String(r["Cena"]).replace(",", ".")) || 0,
         currency: r["Waluta"] || "",
-        status: r["Status"] || "",
-        description: r["Opis"] || "",
-        url: r["URL"] || "",
+        is_unisex: String(r["Unisex"] || "").trim() === "1",
+        measurement_length: numOrNull(r["Wymiar_dl"]),
+        measurement_width: numOrNull(r["Wymiar_szer"]),
         photos,
       };
     });
