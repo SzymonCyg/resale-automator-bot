@@ -1319,6 +1319,7 @@ async function handleImportParse() {
     const warned = importItems.filter(it => importValidateRow(it).length > 0).length;
     status.textContent = `Wczytano ${importItems.length} przedmiotów (${warned} z ostrzeżeniami)`;
     renderImportPreview();
+    updateImportActionsVisibility();
   } catch (e) {
     console.warn("import parse failed", e);
     status.textContent = "Nie udało się odczytać pliku (sprawdź format).";
@@ -1326,3 +1327,116 @@ async function handleImportParse() {
 }
 
 document.getElementById("importParseBtn")?.addEventListener("click", handleImportParse);
+
+/* ============ IMPORT — tworzenie ogłoszeń (Etap 3a) ============ */
+const IMPORT_DELAY_DEFAULTS = { importDelayMin: 30, importDelayMax: 60 };
+
+async function initImportUI() {
+  try {
+    const s = await chrome.storage.local.get(["importDelayMin", "importDelayMax"]);
+    const mn = Number.isFinite(s.importDelayMin) ? s.importDelayMin : IMPORT_DELAY_DEFAULTS.importDelayMin;
+    const mx = Number.isFinite(s.importDelayMax) ? s.importDelayMax : IMPORT_DELAY_DEFAULTS.importDelayMax;
+    const $mn = document.getElementById("importDelayMin");
+    const $mx = document.getElementById("importDelayMax");
+    if ($mn && $mx) {
+      $mn.value = mn; $mx.value = mx;
+      document.getElementById("importDelayMinLabel").textContent = `${mn}s`;
+      document.getElementById("importDelayMaxLabel").textContent = `${mx}s`;
+      if (typeof initDualSlider === "function") {
+        initDualSlider("#importDelayMin", "#importDelayMax", "#importDelayRange", "#importDelayMinLabel", "#importDelayMaxLabel");
+      }
+    }
+  } catch {}
+}
+
+function updateImportActionsVisibility() {
+  const box = document.getElementById("importActions");
+  const delayRow = document.getElementById("importDelayRow");
+  if (!box) return;
+  const valid = importItems.filter(it => importValidateRow(it).length === 0);
+  if (importItems.length === 0) {
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  if (delayRow) delayRow.classList.toggle("hidden", valid.length <= 1);
+}
+
+function importLog(msg, cls = "") {
+  const el = document.getElementById("importRunLog");
+  if (!el) return;
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  const ts = new Date().toLocaleTimeString();
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function runImport(mode) {
+  const target = importItems.filter(it => importValidateRow(it).length === 0);
+  if (!target.length) { importLog("Brak poprawnych przedmiotów (uzupełnij braki)", "err"); return; }
+  if (mode === "publish" && !confirm(`Opublikować ${target.length} ogłoszeń na Vinted?`)) return;
+
+  const tab = await getVintedTab();
+  if (!tab) { importLog("Otwórz zalogowaną kartę vinted.*", "err"); return; }
+
+  const $mn = document.getElementById("importDelayMin");
+  const $mx = document.getElementById("importDelayMax");
+  let dMin = parseInt($mn?.value) || IMPORT_DELAY_DEFAULTS.importDelayMin;
+  let dMax = parseInt($mx?.value) || IMPORT_DELAY_DEFAULTS.importDelayMax;
+  if (dMax < dMin) dMax = dMin;
+  try { await chrome.storage.local.set({ importDelayMin: dMin, importDelayMax: dMax }); } catch {}
+
+  const btnD = document.getElementById("importDraftBtn");
+  const btnP = document.getElementById("importPublishBtn");
+  btnD.disabled = true; btnP.disabled = true;
+
+  for (let i = 0; i < target.length; i++) {
+    const it = target[i];
+    if (i > 0 && target.length > 1) {
+      const wait = Math.floor(dMin + Math.random() * (dMax - dMin + 1));
+      importLog(`⏳ Czekam ${wait}s…`);
+      await new Promise(r => setTimeout(r, wait * 1000));
+    }
+    importLog(`(${i+1}/${target.length}) ${it.title}`);
+    try {
+      const photos = [];
+      for (const url of it.photos) {
+        try { const p = await loadPhoto(url); photos.push(p.dataUrl); }
+        catch (e) { importLog(`  · pominięto zdjęcie: ${e.message}`, "warn"); }
+      }
+      if (!photos.length) { importLog("  ✗ brak zdjęć do wgrania", "err"); continue; }
+      const attributes = {
+        title: it.title,
+        description: it.description,
+        price: it.price,
+        currency: it.currency,
+        brand_id: it.brand_id,
+        brand: it.brand,
+        size_id: it.size_id,
+        status_id: it.status_id,
+        catalog_id: it.catalog_id,
+        color_ids: it.color_ids,
+        package_size_id: it.package_size_id,
+        is_unisex: it.is_unisex,
+        measurement_length: it.measurement_length,
+        measurement_width: it.measurement_width,
+      };
+      const r = await vintedMsg(tab.id, { kind: "CREATE_LISTING_V2", attributes, photos, mode });
+      if (r?.ok) {
+        importLog(`  ✓ ${mode === "publish" ? "opublikowano" : "zapisano jako draft"} (ID ${r.id})`, "ok");
+      } else {
+        importLog(`  ✗ ${r?.error || "nieznany błąd"}`, "err");
+      }
+    } catch (e) {
+      importLog(`  ✗ ${e.message}`, "err");
+    }
+  }
+  importLog("— gotowe —");
+  btnD.disabled = false; btnP.disabled = false;
+}
+
+document.getElementById("importDraftBtn")?.addEventListener("click", () => runImport("draft"));
+document.getElementById("importPublishBtn")?.addEventListener("click", () => runImport("publish"));
+initImportUI();
