@@ -252,6 +252,7 @@
       `/api/v2/wardrobe/${userId}/?per_page=200&page=1&order=newest_first`,
       `/api/v2/users/${userId}/items?per_page=200&page=1`,
       `/api/v2/wardrobe-items?user_id=${userId}&per_page=200`,
+      `/api/v2/item_upload/items?per_page=200&page=1`,
     ];
     let lastErr;
     for (const path of tries) {
@@ -272,7 +273,7 @@
       size_title: it.size_title || it.size?.title,
       price: Number(it.price?.amount ?? it.price ?? 0),
       currency: it.price?.currency_code ?? it.currency,
-      status: it.status,
+      status: it.status || (it.draft_state ? `draft:${it.draft_state}` : null),
       url: it.url || (it.path ? `https://${host}${it.path}` : null),
       photo_url: it.photo?.url ?? it.photos?.[0]?.url ?? null,
       views: it.view_count ?? 0,
@@ -358,8 +359,10 @@
 
   async function deleteOldItem(itemId) {
     const attempts = [
+      { path: `/api/v2/item_upload/items/${itemId}`, init: { method: "DELETE" } },
       { path: `/api/v2/items/${itemId}`, init: { method: "DELETE" } },
       { path: `/api/v2/items/${itemId}/delete`, init: { method: "POST", body: JSON.stringify({}) } },
+      { path: `/api/v2/item_upload/drafts/${itemId}`, init: { method: "DELETE" } },
     ];
     let last = "";
     for (const attempt of attempts) {
@@ -369,7 +372,7 @@
         last = `${res.status}${res.text ? `: ${res.text.slice(0, 180)}` : ""}`;
       } catch (e) { last = e?.message || String(e); }
     }
-    throw new Error(`nie udało się usunąć starego (${last})`);
+    throw new Error(`nie udało się usunąć (${last})`);
   }
 
   function buildDraft({ original, price, currency, photoIds, tempUuid, assignedPhotos }) {
