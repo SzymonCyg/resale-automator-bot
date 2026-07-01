@@ -155,15 +155,45 @@ async function loadItems() {
 
 let filterStatus = "all";
 
-function isActiveStatus(it) {
+// Vinted zwraca status jako liczbę lub string — normalizuj do kategorii
+function categorizeStatus(it) {
   const s = it.status;
-  return s === "active" || s === "visible" || s === "1" || s === 1;
+  const sStr = String(s ?? "").toLowerCase().trim();
+
+  // Draft / wersja robocza
+  if (
+    sStr === "draft" || sStr.startsWith("draft:") ||
+    s === 0 || sStr === "0"
+  ) return "draft";
+
+  // Sprzedane / zamknięte
+  if (
+    sStr === "sold" || sStr === "closed" || sStr === "sold_by_buyer" ||
+    sStr === "sold_by_seller" || sStr === "sold_unseen" ||
+    s === 2 || sStr === "2" || sStr === "3"
+  ) return "sold";
+
+  // Aktywne
+  if (
+    sStr === "active" || sStr === "visible" ||
+    s === 1 || sStr === "1"
+  ) return "active";
+
+  // Wszystko inne = inactive (zarezerwowane, ukryte itp.)
+  return "inactive";
+}
+
+function statusLabel(it) {
+  const cat = categorizeStatus(it);
+  if (cat === "active") return "Aktywne";
+  if (cat === "draft") return "Szkic";
+  if (cat === "sold") return "Sprzedane";
+  return "Nieaktywne";
 }
 
 function getFilteredItems() {
-  if (filterStatus === "active") return items.filter(isActiveStatus);
-  if (filterStatus === "inactive") return items.filter((it) => !isActiveStatus(it));
-  return items;
+  if (filterStatus === "all") return items;
+  return items.filter((it) => categorizeStatus(it) === filterStatus);
 }
 
 function renderItems() {
@@ -183,7 +213,7 @@ function renderItems() {
       <td style="text-align:right"><b>${it.price} ${it.currency || ""}</b></td>
       <td style="text-align:right" class="muted">${it.views ?? 0}</td>
       <td style="text-align:right" class="muted">${it.favourite_count ?? 0}</td>
-      <td><span class="pill">${it.status || "—"}</span></td>
+      <td><span class="pill pill--${categorizeStatus(it)}">${statusLabel(it)}</span></td>
     </tr>`).join("");
   body.querySelectorAll(".sel").forEach((cb) =>
     cb.addEventListener("change", () => {
