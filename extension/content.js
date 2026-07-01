@@ -330,19 +330,23 @@
   }
 
   async function fetchPublicItem(id) {
-    try {
-      const res = await vintedRaw(`/api/v2/items/${id}`, {});
-      if (!res?.ok) return null;
-      const text = res?.text || "";
-      if (text.trimStart().startsWith("<")) return null;
-      return res?.json?.item || res?.json || null;
-    } catch { return null; }
+    for (const path of [`/api/v2/items/${id}/details`, `/api/v2/items/${id}`]) {
+      try {
+        const res = await vintedRaw(path, {});
+        if (!res?.ok) continue;
+        const text = res?.text || "";
+        if (text.trimStart().startsWith("<")) continue;
+        const item = res?.json?.item || res?.json || null;
+        if (item && (item.size != null || item.catalog_branch_title != null || item.title != null)) return item;
+      } catch {}
+    }
+    return null;
   }
 
   function extractLabels(pub) {
     if (!pub) return { brand: "", size: "", category: "", colors: [] };
     const t = (v) => (v && typeof v === "object" ? (v.title || v.name || "") : (v || ""));
-    const brand = pub.brand_title || t(pub.brand_dto) || t(pub.brand) || "";
+    const brand = pub.brand_title || t(pub.brand) || t(pub.brand_dto) || "";
     const size = pub.size || pub.size_title || t(pub.size_dto) || "";
     const category = pub.catalog_branch_title || pub.catalog_title || t(pub.catalog) || t(pub.category) || "";
     const colors = [
@@ -351,6 +355,7 @@
     ].filter(Boolean);
     return { brand, size, category, colors };
   }
+
 
 
 
