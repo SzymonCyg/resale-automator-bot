@@ -285,6 +285,17 @@
     const me = await getMe();
     if (!me) throw new Error("Niezalogowany na vinted");
     const raw = await fetchRawItems(me.id);
+    // DEBUG - do usunięcia po diagnozie
+    console.log("[VM DEBUG] raw item statuses:", raw.slice(0, 10).map(it => ({
+      id: it.id,
+      title: (it.title || "").slice(0, 30),
+      status: it.status,
+      status_type: typeof it.status,
+      active: it.active,
+      state: it.state,
+      item_state: it.item_state,
+      visibility: it.visibility,
+    })));
     return { username: me.login, userId: me.id, items: raw.map(normalize) };
   }
 
