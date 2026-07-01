@@ -962,6 +962,7 @@
         if (msgs.length > 0) {
           alProcessedIds.add(like.notifId);
         } else {
+          let offerSent = false;
           if (cur.autoLikesDiscount) {
             const txId = conv?.transaction?.id || conv?.transaction_id;
             const origPrice = Number(conv?.transaction?.item_price?.amount
@@ -978,19 +979,33 @@
               try {
                 await alSendOffer(txId, newP, curCode, csrfToken, conv?.id || conv?.conversation_id);
                 await alPushStat(`💸 oferta ${newP} ${curCode} → @${oppLogin}`);
+                offerSent = true;
               } catch (e) {
                 await alPushStat(`⚠ oferta @${oppLogin}: ${e.message}`);
               }
+            } else {
+              await alPushStat(`⚠ brak danych do oferty @${oppLogin}`);
             }
           }
           const convId = conv?.id || conv?.conversation_id;
-          const body = (cur.autoLikesTemplate || "").replace(/@username/g, oppLogin);
+          const rawTemplate = (cur.autoLikesTemplate || "").trim();
+          const body = rawTemplate ? (cur.autoLikesTemplate || "").replace(/@username/g, oppLogin) : "";
           if (convId && body) {
             await alSendReply(convId, body, csrfToken);
             alProcessedIds.add(like.notifId);
             await alPushStat(`✓ Wiadomość wysłana → @${oppLogin}`, 1);
+          } else if (offerSent) {
+            alProcessedIds.add(like.notifId);
+            await alPushStat(`✓ Sama oferta wysłana → @${oppLogin}`, 1);
+          } else if (!cur.autoLikesDiscount && !rawTemplate) {
+            alProcessedIds.add(like.notifId);
+            await alPushStat(`⚠ Brak treści i wyłączona oferta — pomijam @${oppLogin}`);
+          } else {
+            alProcessedIds.add(like.notifId);
+            await alPushStat(`⚠ Nic nie wysłano → @${oppLogin} (pomijam)`);
           }
         }
+
         if (!alLatestId || Number(like.notifId) > Number(alLatestId)) {
           alLatestId = like.notifId;
           if (like.updatedAt) alLatestDate = new Date(like.updatedAt);
