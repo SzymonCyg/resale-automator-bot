@@ -100,6 +100,37 @@
     });
   }
 
+  let alCaptchaInProgress = false;
+  let alCaptchaLastFailAt = 0;
+
+  function solveCaptchaViaBridge(captchaUrl) {
+    return bridgeRequest("SOLVE_CAPTCHA", { captchaUrl, timeout: 180000 }, 190000);
+  }
+
+  async function handleCaptchaIfNeeded(res) {
+    const captchaUrl = res?.captchaUrl;
+    if (!captchaUrl) return false;
+    if (alCaptchaInProgress) return false;
+    alCaptchaInProgress = true;
+    try {
+      if (typeof alPushStat === "function") await alPushStat("🔐 Vinted wymaga weryfikacji — otwieram captchę...");
+      const result = await solveCaptchaViaBridge(captchaUrl);
+      if (result?.solved) {
+        if (typeof alPushStat === "function") await alPushStat("✅ Weryfikacja zakończona — wznawiam");
+        return true;
+      }
+      alCaptchaLastFailAt = Date.now();
+      if (result?.hardblock) {
+        if (typeof alPushStat === "function") await alPushStat("⛔ Vinted zablokował dostęp (hardblock) — spróbuj później");
+      } else {
+        if (typeof alPushStat === "function") await alPushStat("⚠ Weryfikacja nieukończona — spróbuj ręcznie odświeżyć Vinted");
+      }
+      return false;
+    } finally {
+      alCaptchaInProgress = false;
+    }
+  }
+
   function pageFetch(path, init = {}) {
     const { skipXRequestedWith, csrfToken, useApiHost, ...fetchInit } = init;
     return bridgeRequest("FETCH", {
