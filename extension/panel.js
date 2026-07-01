@@ -281,6 +281,11 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
     try {
       const r = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL_V2", id: it.id });
       const detail = r?.item || it;
+      let labels = null;
+      try {
+        const lab = await vintedMsg(tab.id, { kind: "FETCH_ITEM_LABELS_V2", id: it.id });
+        labels = lab?.labels || null;
+      } catch (e) { console.warn("labels failed", it.id, e); }
       let photoUrls = (detail.photos || [])
         .map((p) => p?.full_size_url || p?.url)
         .filter(Boolean);
@@ -297,34 +302,40 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
       rows.push({
         _it: it,
         _detail: detail,
+        _labels: labels,
         _photos: mirrored,
       });
     } catch (e) {
       console.warn("item failed", it.id, e);
-      rows.push({ _it: it, _detail: it, _photos: [] });
+      rows.push({ _it: it, _detail: it, _labels: null, _photos: [] });
     }
-    await new Promise((res) => setTimeout(res, 300 + Math.random() * 300));
+    await new Promise((res) => setTimeout(res, 400 + Math.random() * 400));
   }
+
 
   const STATUS_ID_TO_LABEL = { 1: "Nowy z metką", 2: "Nowy bez metki", 6: "Bardzo dobry", 3: "Dobry", 4: "Zadowalający" };
   const valId = (v) => (v && typeof v === "object" ? v.id : v) ?? "";
   const valTitle = (v) => (v && typeof v === "object" ? v.title : "") ?? "";
 
-  const outRows = rows.map(({ _it, _detail, _photos }) => {
+  const outRows = rows.map(({ _it, _detail, _labels, _photos }) => {
     const d = _detail || {};
+    const lab = _labels || {};
     const attrs = Array.isArray(d.item_attributes) ? d.item_attributes : [];
     const condAttr = attrs.find(a => a && a.code === "condition");
     const statusId = d.status_id || valId(d.status) || d.condition_id || valId(d.condition) || (condAttr?.ids?.[0]) || "";
     const statusLabel = valTitle(d.status) || valTitle(d.condition) || STATUS_ID_TO_LABEL[statusId] || "";
     const brandId = d.brand_id || valId(d.brand_dto) || valId(d.brand) || "";
-    const brandLabel = d.brand_title || valTitle(d.brand_dto) || valTitle(d.brand) || _it.brand || "";
+    const brandLabel = lab.brand || d.brand_title || valTitle(d.brand_dto) || valTitle(d.brand) || _it.brand || "";
     const sizeId = d.size_id || valId(d.size) || "";
-    const sizeLabel = d.size_title || valTitle(d.size) || _it.size_title || "";
+    const sizeLabel = lab.size || d.size_title || valTitle(d.size) || _it.size_title || "";
     const catalogId = d.catalog_id || valId(d.catalog) || "";
-    const catalogLabel = d.catalog_title || valTitle(d.catalog) || "";
+    const catalogLabel = lab.category || d.catalog_title || valTitle(d.catalog) || "";
     const colorIds = [d.color1_id, d.color2_id].filter(c => c != null);
-    const colorLabels = [valTitle(d.color1) || d.color1_title, valTitle(d.color2) || d.color2_title].filter(Boolean);
+    const labColors = Array.isArray(lab.colors) ? lab.colors.filter(Boolean) : [];
+    const fallbackColors = [valTitle(d.color1) || d.color1_title, valTitle(d.color2) || d.color2_title].filter(Boolean);
+    const colorLabels = labColors.length ? labColors : fallbackColors;
     const packageId = d.package_size_id || valId(d.package_size) || "";
+
 
     const row = {
       "ID": _it.id,
