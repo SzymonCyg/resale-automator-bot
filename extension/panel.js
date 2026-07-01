@@ -284,7 +284,7 @@ $("#closeRelist").addEventListener("click", closeRelist);
 $("#cancelRelist").addEventListener("click", closeRelist);
 
 let photoMode = "auto";   // 'auto' | 'manual'
-let priceMode = "keep";   // 'keep' | 'percent'
+let priceMode = "keep";   // 'keep' | 'percent' | 'amount'
 let textMode  = "ai";     // 'ai' | 'keep'
 
 $$(".tile[data-photo]").forEach((t) =>
@@ -299,6 +299,7 @@ $$(".tile[data-price]").forEach((t) =>
     $$(".tile[data-price]").forEach((x) => x.classList.toggle("active", x === t));
     priceMode = t.dataset.price;
     $("#percentBox").classList.toggle("hidden", priceMode !== "percent");
+    $("#amountBox").classList.toggle("hidden", priceMode !== "amount");
     refreshPricePreviews();
   }),
 );
@@ -306,19 +307,29 @@ $$(".tile[data-text]").forEach((t) =>
   t.addEventListener("click", () => {
     $$(".tile[data-text]").forEach((x) => x.classList.toggle("active", x === t));
     textMode = t.dataset.text;
+    applyTextModeLock();
   }),
 );
 $("#pricePercent").addEventListener("input", refreshPricePreviews);
+$("#priceAmount").addEventListener("input", refreshPricePreviews);
 
 function getPercent() {
   const v = Number($("#pricePercent").value);
   return Number.isFinite(v) && v > 0 && v < 100 ? v : 0;
+}
+function getAmount() {
+  const v = Number($("#priceAmount").value);
+  return Number.isFinite(v) && v > 0 ? v : 0;
 }
 function computePrice(st) {
   if (st.manualPrice != null) return st.manualPrice;
   if (priceMode === "percent") {
     const pct = getPercent();
     if (pct > 0) return Math.round(st.origPrice * (1 - pct / 100) * 100) / 100;
+  }
+  if (priceMode === "amount") {
+    const amt = getAmount();
+    if (amt > 0) return Math.max(0, Math.round((st.origPrice - amt) * 100) / 100);
   }
   return st.origPrice;
 }
@@ -330,9 +341,23 @@ function refreshPricePreviews() {
     const input = row.querySelector(".r-price input");
     const prev = row.querySelector(".r-price .r-preview");
     if (st.manualPrice == null) input.value = String(computePrice(st));
-    prev.textContent = priceMode === "percent" && st.manualPrice == null && getPercent() > 0
-      ? `−${getPercent()}% z ${st.origPrice}` : "";
+    let previewText = "";
+    if (st.manualPrice == null) {
+      if (priceMode === "percent" && getPercent() > 0) {
+        previewText = `−${getPercent()}% z ${st.origPrice}`;
+      } else if (priceMode === "amount" && getAmount() > 0) {
+        previewText = `−${getAmount()} z ${st.origPrice}`;
+      }
+    }
+    prev.textContent = previewText;
   });
+}
+
+function applyTextModeLock() {
+  const locked = textMode === "ai";
+  const list = $("#relistList");
+  if (!list) return;
+  list.classList.toggle("text-locked", locked);
 }
 
 const RELIST_DELAY_DEFAULTS = { relistDelayMin: 30, relistDelayMax: 45 };
