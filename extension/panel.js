@@ -270,6 +270,7 @@ $("#cancelRelist").addEventListener("click", closeRelist);
 
 let photoMode = "auto";   // 'auto' | 'manual'
 let priceMode = "keep";   // 'keep' | 'percent'
+let textMode  = "ai";     // 'ai' | 'keep'
 
 $$(".tile[data-photo]").forEach((t) =>
   t.addEventListener("click", () => {
@@ -284,6 +285,12 @@ $$(".tile[data-price]").forEach((t) =>
     priceMode = t.dataset.price;
     $("#percentBox").classList.toggle("hidden", priceMode !== "percent");
     refreshPricePreviews();
+  }),
+);
+$$(".tile[data-text]").forEach((t) =>
+  t.addEventListener("click", () => {
+    $$(".tile[data-text]").forEach((x) => x.classList.toggle("active", x === t));
+    textMode = t.dataset.text;
   }),
 );
 $("#pricePercent").addEventListener("input", refreshPricePreviews);
