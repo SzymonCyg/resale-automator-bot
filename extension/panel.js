@@ -519,9 +519,10 @@ function mountCollapsible(host, kind, st, i, multiline) {
   host.innerHTML = "";
   const collapsed = document.createElement("div");
   collapsed.className = "r-collapsed" + (multiline ? " desc" : "");
-  collapsed.textContent = text || (multiline ? "(brak opisu — kliknij aby dodać)" : "(brak tytułu)");
-  collapsed.title = "Kliknij aby edytować";
+  collapsed.textContent = text || (multiline ? "(brak opisu)" : "(brak tytułu)");
+  collapsed.title = textMode === "ai" ? "Edycja zablokowana — wybierz „Zostaw, lub edytuj ręcznie”" : "Kliknij aby edytować";
   collapsed.addEventListener("click", () => {
+    if (textMode === "ai") return;
     host.innerHTML = "";
     const wrap = document.createElement("div");
     wrap.className = "r-expanded";
