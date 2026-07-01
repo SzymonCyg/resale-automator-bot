@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "0.9.10";
+  const BRIDGE_VERSION = "0.9.11";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -21,9 +21,6 @@
       || "";
   }
 
-  // Subdomena api.vinted.{tld} obsługuje wyłącznie auth mobilnego API i z poziomu
-  // przeglądarki zwraca HTML 404 dla /api/v2/*. Wszystkie zapytania lecą więc
-  // same-origin (www.vinted.{tld}) — wtedy lecą cookies sesji i CSRF jest ważny.
   function buildUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
     return new URL(path, window.location.origin).toString();
@@ -72,7 +69,6 @@
       if (msg.kind === "UPLOAD_PHOTO") {
         const form = new FormData();
         const blob = await dataUrlToBlob(msg.dataUrl);
-        // Kolejność pól wymagana przez Vinted: type, file, temp_uuid — każde zdjęcie ma własne UUID
         form.append("photo[type]", "item");
         form.append("photo[file]", blob, msg.filename || `photo-${Date.now()}.jpg`);
         const tempUuid = msg.tempUuid
@@ -86,7 +82,6 @@
         headers.set("Accept", "application/json, text/plain, */*");
         headers.set("Locale", locale);
 
-        // Same-origin upload — Vinted akceptuje /api/v2/photos na www.vinted.{tld}
         const url = buildUrl("/api/v2/photos");
         const response = await fetch(url, {
           method: "POST",
