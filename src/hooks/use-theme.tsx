@@ -12,12 +12,12 @@ function applyTheme(t: Theme) {
 }
 
 export function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
+  if (typeof window === "undefined") return "light";
   try {
     const stored = window.localStorage.getItem(KEY) as Theme | null;
     if (stored === "dark" || stored === "light") return stored;
   } catch {}
-  return "dark";
+  return "light";
 }
 
 export function useTheme() {
