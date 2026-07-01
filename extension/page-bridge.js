@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "0.9.9";
+  const BRIDGE_VERSION = "0.9.10";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -72,7 +72,7 @@
       if (msg.kind === "UPLOAD_PHOTO") {
         const form = new FormData();
         const blob = await dataUrlToBlob(msg.dataUrl);
-        // Kolejność jak w Dotb: type, file, temp_uuid — każde zdjęcie dostaje własne UUID
+        // Kolejność pól wymagana przez Vinted: type, file, temp_uuid — każde zdjęcie ma własne UUID
         form.append("photo[type]", "item");
         form.append("photo[file]", blob, msg.filename || `photo-${Date.now()}.jpg`);
         const tempUuid = msg.tempUuid
