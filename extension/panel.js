@@ -647,14 +647,21 @@ $("#runRelist").addEventListener("click", async () => {
   if (!tab) return log("✗ Brak otwartej karty Vinted", "err");
   $("#runRelist").disabled = true;
 
+  const delayMin = parseInt($("#relistDelayMin").value) || RELIST_DELAY_DEFAULTS.relistDelayMin;
+  const delayMax = parseInt($("#relistDelayMax").value) || RELIST_DELAY_DEFAULTS.relistDelayMax;
+  const dMin = Math.min(delayMin, delayMax);
+  const dMax = Math.max(delayMin, delayMax);
+  try { await chrome.storage.local.set({ relistDelayMin: dMin, relistDelayMax: dMax }); } catch {}
+
   for (let idx = 0; idx < relistState.length; idx++) {
     const st = relistState[idx];
 
     if (idx > 0) {
-      const delaySec = Math.floor(15 + Math.random() * (300 - 15));
+      const delaySec = Math.floor(dMin + Math.random() * Math.max(1, dMax - dMin));
       log(`⏳ Czekam ${delaySec}s przed kolejnym ogłoszeniem...`);
       await new Promise(r => setTimeout(r, delaySec * 1000));
     }
+
 
     const finalPrice = computePrice(st);
     log(`→ ${st.title} (${finalPrice} ${st.currency})...`);
