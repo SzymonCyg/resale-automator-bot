@@ -1202,3 +1202,85 @@ async function boot() {
 }
 boot();
 
+
+/* ============ IMPORT (Etap 2) ============ */
+let importItems = [];
+
+function importValidateRow(it) {
+  const w = [];
+  if (!it.title || !String(it.title).trim()) w.push("brak tytułu");
+  if (!(Number(it.price) > 0)) w.push("cena");
+  if (!it.photos || it.photos.length === 0) w.push("brak zdjęć");
+  return w;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function renderImportPreview() {
+  const box = document.getElementById("importPreview");
+  if (!box) return;
+  if (!importItems.length) { box.innerHTML = ""; return; }
+  const rows = importItems.map((it, i) => {
+    const warns = importValidateRow(it);
+    const bad = warns.length > 0;
+    const thumb = it.photos[0]
+      ? `<img src="${escapeHtml(it.photos[0])}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:4px" />`
+      : `<div style="width:48px;height:48px;background:#eee;border-radius:4px"></div>`;
+    return `<tr style="${bad ? "background:rgba(220,50,50,.08)" : ""}">
+      <td>${bad ? '<span title="' + escapeHtml(warns.join(", ")) + '" style="color:#c33">●</span>' : ""}</td>
+      <td>${thumb}</td>
+      <td>${escapeHtml(it.title)}</td>
+      <td>${escapeHtml(it.price)} ${escapeHtml(it.currency)}</td>
+      <td>${escapeHtml(it.brand)}</td>
+      <td>${escapeHtml(it.size_title)}</td>
+      <td style="text-align:center">${it.photos.length}</td>
+    </tr>`;
+  }).join("");
+  box.innerHTML = `<table class="tbl" style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th></th><th>Miniatura</th><th>Tytuł</th><th>Cena</th><th>Marka</th><th>Rozmiar</th><th>Zdjęć</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function handleImportParse() {
+  const input = document.getElementById("importFile");
+  const status = document.getElementById("importStatus");
+  const file = input && input.files && input.files[0];
+  if (!file) { status.textContent = "Wybierz plik."; return; }
+  if (typeof XLSX === "undefined") { status.textContent = "Brak biblioteki XLSX."; return; }
+  status.textContent = "Wczytywanie…";
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    importItems = raw.map(r => {
+      const photoKeys = Object.keys(r)
+        .filter(k => /^Zdjęcie_\d+$/.test(k))
+        .sort((a, b) => Number(a.split("_")[1]) - Number(b.split("_")[1]));
+      const photos = photoKeys.map(k => r[k]).filter(v => typeof v === "string" && v.trim());
+      return {
+        id: r["ID"] || "",
+        title: r["Tytuł"] || "",
+        brand: r["Marka"] || "",
+        size_title: r["Rozmiar"] || "",
+        price: Number(String(r["Cena"]).replace(",", ".")) || 0,
+        currency: r["Waluta"] || "",
+        status: r["Status"] || "",
+        description: r["Opis"] || "",
+        url: r["URL"] || "",
+        photos,
+      };
+    });
+    const warned = importItems.filter(it => importValidateRow(it).length > 0).length;
+    status.textContent = `Wczytano ${importItems.length} przedmiotów (${warned} z ostrzeżeniami)`;
+    renderImportPreview();
+  } catch (e) {
+    console.warn("import parse failed", e);
+    status.textContent = "Nie udało się odczytać pliku (sprawdź format).";
+  }
+}
+
+document.getElementById("importParseBtn")?.addEventListener("click", handleImportParse);
