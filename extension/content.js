@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.15";
+  const CONTENT_VERSION = "0.9.16";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -579,6 +579,58 @@
   function alRand(min, max) { return Math.floor(min + Math.random() * Math.max(1, max - min)); }
   function alSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+  const AL_INSTANCE_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const AL_LOCK_KEY = "autoLikesLock";
+  const AL_LOCK_TTL_MS = 45000;
+  let alHeartbeatTimer = null;
+
+  async function alReadLock() {
+    const { [AL_LOCK_KEY]: lock } = await chrome.storage.local.get([AL_LOCK_KEY]);
+    return lock || null;
+  }
+
+  async function alWriteLock() {
+    try {
+      await chrome.storage.local.set({
+        [AL_LOCK_KEY]: {
+          instanceId: AL_INSTANCE_ID,
+          heartbeat: Date.now(),
+          visible: document.visibilityState === "visible",
+        },
+      });
+    } catch {}
+  }
+
+  async function alTryAcquireLock() {
+    const lock = await alReadLock();
+    const now = Date.now();
+    const fresh = !!lock && (now - lock.heartbeat) < AL_LOCK_TTL_MS;
+    const mine = !!lock && lock.instanceId === AL_INSTANCE_ID;
+    const iAmVisible = document.visibilityState === "visible";
+    const takeOverFromHidden = fresh && !mine && !lock.visible && iAmVisible;
+    if (fresh && !mine && !takeOverFromHidden) return false;
+    await alWriteLock();
+    await alSleep(250 + Math.random() * 250);
+    const check = await alReadLock();
+    return !!check && check.instanceId === AL_INSTANCE_ID;
+  }
+
+  async function alReleaseLockIfMine() {
+    try {
+      const lock = await alReadLock();
+      if (lock && lock.instanceId === AL_INSTANCE_ID) await chrome.storage.local.remove([AL_LOCK_KEY]);
+    } catch {}
+  }
+
+  function alStartHeartbeat() {
+    if (alHeartbeatTimer) return;
+    alHeartbeatTimer = setInterval(() => { alWriteLock(); }, 15000);
+  }
+
+  function alStopHeartbeat() {
+    if (alHeartbeatTimer) { clearInterval(alHeartbeatTimer); alHeartbeatTimer = null; }
+  }
+
   async function alGetSettings() {
     const s = await chrome.storage.local.get(Object.keys(AL_DEFAULTS).concat(["autoLikesStats"]));
     return { ...AL_DEFAULTS, ...s };
@@ -938,18 +990,25 @@
 
   async function alStartLoop() {
     if (alRunning) return;
+    const acquired = await alTryAcquireLock();
+    if (!acquired) return;
     alRunning = true;
+    alStartHeartbeat();
     const s0 = await alGetSettings();
     alMode = (s0.autoLikesTimeFilter || 0) > 0 ? 'backlog' : 'live';
     await alPushStat(`🔍 Tryb: ${alMode === 'backlog' ? `historyczne (${s0.autoLikesTimeFilter}s wstecz)` : 'tylko nowe'}`);
     while (true) {
       const s = await alGetSettings();
-      if (!s.autoLikesEnabled) { alRunning = false; alMode = 'idle'; return; }
+      if (!s.autoLikesEnabled) break;
       try { await alLoopOnce(); } catch (e) { console.warn("[AL]", e); }
       const wait = alRand(s.autoLikesDelayNotifMin, s.autoLikesDelayNotifMax);
       await new Promise(r => { alKick = r; setTimeout(r, wait); });
       alKick = null;
     }
+    alRunning = false;
+    alMode = 'idle';
+    alStopHeartbeat();
+    await alReleaseLockIfMine();
   }
 
   chrome.storage.onChanged.addListener((changes) => {
@@ -957,6 +1016,10 @@
       if (changes.autoLikesEnabled.newValue) alStartLoop();
       else if (alKick) { try { alKick(); } catch {} }
     }
+  });
+
+  window.addEventListener("pagehide", () => {
+    if (alRunning) alReleaseLockIfMine();
   });
 
   ensureExtensionSignedIn()
