@@ -155,40 +155,25 @@ async function loadItems() {
 
 let filterStatus = "all";
 
-// Vinted zwraca status jako liczbę lub string — normalizuj do kategorii
 function categorizeStatus(it) {
-  const s = it.status;
-  const sStr = String(s ?? "").toLowerCase().trim();
-
-  // Draft / wersja robocza
-  if (
-    sStr === "draft" || sStr.startsWith("draft:") ||
-    s === 0 || sStr === "0"
-  ) return "draft";
-
-  // Sprzedane / zamknięte
-  if (
-    sStr === "sold" || sStr === "closed" || sStr === "sold_by_buyer" ||
-    sStr === "sold_by_seller" || sStr === "sold_unseen" ||
-    s === 2 || sStr === "2" || sStr === "3"
-  ) return "sold";
-
-  // Aktywne
-  if (
-    sStr === "active" || sStr === "visible" ||
-    s === 1 || sStr === "1"
-  ) return "active";
-
-  // Wszystko inne = inactive (zarezerwowane, ukryte itp.)
-  return "inactive";
+  const s = String(it.status ?? "").toLowerCase();
+  if (s === "draft" || s === "backup" || s === "processing" || s === "verification") return "draft";
+  if (s === "sold") return "sold";
+  if (s === "hidden" || s === "reserved") return "inactive";
+  return "active"; // wszystko inne (w tym brak statusu) = aktywne
 }
 
 function statusLabel(it) {
-  const cat = categorizeStatus(it);
-  if (cat === "active") return "Aktywne";
-  if (cat === "draft") return "Szkic";
-  if (cat === "sold") return "Sprzedane";
-  return "Nieaktywne";
+  const s = it.status;
+  if (s === "active") return "Aktywne";
+  if (s === "reserved") return "Zarezerwowane";
+  if (s === "hidden") return "Ukryte";
+  if (s === "draft") return "Szkic";
+  if (s === "sold") return "Sprzedane";
+  if (s === "backup") return "Kopia";
+  if (s === "processing") return "Przetwarzane";
+  if (s === "verification") return "Weryfikacja";
+  return "Aktywne";
 }
 
 function getFilteredItems() {

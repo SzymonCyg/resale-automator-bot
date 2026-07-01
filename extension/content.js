@@ -266,17 +266,24 @@
   }
 
   function normalize(it) {
-    // DEBUG — usuń po diagnozie
-    console.log("[VM DEBUG] item status raw:", {
-      id: it.id,
-      title: it.title?.slice(0, 30),
-      status: it.status,
-      status_type: typeof it.status,
-      can_push_up: it.can_push_up,
-      is_visible: it.is_visible,
-      moderation_status: it.moderation_status,
-      draft_state: it.draft_state,
-    });
+    // Wyznacz status na podstawie flag boolean (tak jak robi to Vinted API)
+    function resolveItemStatus(item) {
+      if (item.is_backup) return "backup";
+      if (item.is_processing) return "processing";
+      if (item.is_draft || item.draft_state) return "draft";
+      if (item.is_hidden && !item.can_edit) return "verification";
+      if (item.is_hidden) return "hidden";
+      if (item.item_closing_action === "sold" || item.status === "closed") return "sold";
+      if (item.is_reserved) return "reserved";
+      // Fallback na surowe pole status jeśli jest
+      const s = String(item.status ?? "").toLowerCase();
+      if (s === "draft" || s === "0") return "draft";
+      if (s === "sold" || s === "closed" || s === "2" || s === "3") return "sold";
+      if (s === "hidden") return "hidden";
+      if (s === "reserved") return "reserved";
+      if (s === "active" || s === "visible" || s === "1") return "active";
+      return "active"; // domyślnie aktywny jak robi Dotb
+    }
     return {
       id: it.id,
       title: it.title,
@@ -284,7 +291,7 @@
       size_title: it.size_title || it.size?.title,
       price: Number(it.price?.amount ?? it.price ?? 0),
       currency: it.price?.currency_code ?? it.currency,
-      status: it.status || (it.draft_state ? `draft:${it.draft_state}` : null),
+      status: resolveItemStatus(it),
       url: it.url || (it.path ? `https://${host}${it.path}` : null),
       photo_url: it.photo?.url ?? it.photos?.[0]?.url ?? null,
       views: it.view_count ?? 0,
@@ -296,17 +303,6 @@
     const me = await getMe();
     if (!me) throw new Error("Niezalogowany na vinted");
     const raw = await fetchRawItems(me.id);
-    // DEBUG - do usunięcia po diagnozie
-    console.log("[VM DEBUG] raw item statuses:", raw.slice(0, 10).map(it => ({
-      id: it.id,
-      title: (it.title || "").slice(0, 30),
-      status: it.status,
-      status_type: typeof it.status,
-      active: it.active,
-      state: it.state,
-      item_state: it.item_state,
-      visibility: it.visibility,
-    })));
     return { username: me.login, userId: me.id, items: raw.map(normalize) };
   }
 
