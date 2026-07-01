@@ -488,6 +488,7 @@ function renderRelistList() {
     });
   });
   refreshPricePreviews();
+  applyTextModeLock();
 }
 
 // ---------- CURRENCY DETECTION ----------
