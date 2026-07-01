@@ -805,7 +805,7 @@ function readAutoLikesForm() {
     autoLikesDiscountUnit: $("#alDiscountUnit").value,
     autoLikesDelayNotifMin: num("#alNotifMin", 60) * 1000,
     autoLikesDelayNotifMax: num("#alNotifMax", 120) * 1000,
-    autoLikesMsgDelayMin: num("#alMsgMin", 30) * 1000,
+    autoLikesMsgDelayMin: num("#alMsgMin", 15) * 1000,
     autoLikesMsgDelayMax: num("#alMsgMax", 60) * 1000,
     autoLikesTimeFilter: parseInt($("#alTimeFilter").value) || 0,
   };
