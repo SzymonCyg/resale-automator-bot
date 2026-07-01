@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "1.0.8";
+  const BRIDGE_VERSION = "1.0.9";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;

@@ -221,6 +221,31 @@
           <span id="importStatus" class="muted"></span>
         </div>
         <div id="importPreview" style="margin-top:12px"></div>
+
+        <div id="importActions" class="hidden" style="margin-top:12px">
+          <div id="importDelayRow" class="al-row hidden">
+            <label class="al-label">Opóźnienie między ogłoszeniami</label>
+            <div class="al-slider-wrap">
+              <div class="al-slider-labels">
+                <span id="importDelayMinLabel">30s</span>
+                <span class="muted">–</span>
+                <span id="importDelayMaxLabel">60s</span>
+              </div>
+              <div class="al-dual-slider" id="importDelaySlider">
+                <div class="slider-track"></div>
+                <div class="slider-range" id="importDelayRange"></div>
+                <input type="range" class="slider-min" id="importDelayMin" min="15" max="300" step="1" value="30" />
+                <input type="range" class="slider-max" id="importDelayMax" min="15" max="300" step="1" value="60" />
+              </div>
+              <div class="al-slider-limits"><span>15s</span><span>300s</span></div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
+            <button id="importDraftBtn" class="btn">Dodaj jako wersję roboczą</button>
+            <button id="importPublishBtn" class="btn primary">Dodaj i opublikuj</button>
+          </div>
+          <div id="importRunLog" class="log" style="margin-top:8px"></div>
+        </div>
       </section>
     </div>
 
