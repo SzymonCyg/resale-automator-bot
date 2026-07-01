@@ -115,9 +115,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
-  const themeInit = `(() => { try { var t = localStorage.getItem('vm.theme'); if (t !== 'light' && t !== 'dark') t = 'dark'; var r = document.documentElement; r.classList.remove('dark','light'); r.classList.add(t); r.style.colorScheme = t; } catch(e){} })();`;
+  const themeInit = `(() => { try { var t = localStorage.getItem('vm.theme'); if (t !== 'light' && t !== 'dark') t = 'light'; var r = document.documentElement; r.classList.remove('dark','light'); r.classList.add(t); r.style.colorScheme = t; } catch(e){} })();`;
   return (
-    <html lang="pl" className="dark">
+    <html lang="pl" className="light">
       <head>
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
