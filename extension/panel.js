@@ -1453,3 +1453,118 @@ async function runImport(mode) {
 document.getElementById("importDraftBtn")?.addEventListener("click", () => runImport("draft"));
 document.getElementById("importPublishBtn")?.addEventListener("click", () => runImport("publish"));
 initImportUI();
+
+/* ============ PUBLISH DRAFTS (Etap 3b) ============ */
+const PUBLISH_DELAY_DEFAULTS = { publishDelayMin: 30, publishDelayMax: 60 };
+
+async function initPublishDraftsUI() {
+  try {
+    const s = await chrome.storage.local.get(["publishDelayMin", "publishDelayMax"]);
+    const mn = Number.isFinite(s.publishDelayMin) ? s.publishDelayMin : PUBLISH_DELAY_DEFAULTS.publishDelayMin;
+    const mx = Number.isFinite(s.publishDelayMax) ? s.publishDelayMax : PUBLISH_DELAY_DEFAULTS.publishDelayMax;
+    const $mn = document.getElementById("publishDelayMin");
+    const $mx = document.getElementById("publishDelayMax");
+    if ($mn && $mx) {
+      $mn.value = mn; $mx.value = mx;
+      document.getElementById("publishDelayMinLabel").textContent = `${mn}s`;
+      document.getElementById("publishDelayMaxLabel").textContent = `${mx}s`;
+      if (typeof initDualSlider === "function") {
+        initDualSlider("#publishDelayMin", "#publishDelayMax", "#publishDelayRange", "#publishDelayMinLabel", "#publishDelayMaxLabel");
+      }
+    }
+  } catch {}
+}
+
+function updatePublishDraftsVisibility() {
+  const btn = document.getElementById("publishDraftsBtn");
+  const row = document.getElementById("publishDelayRow");
+  const log = document.getElementById("publishDraftsLog");
+  if (!btn) return;
+  if (filterStatus !== "draft") {
+    btn.classList.add("hidden");
+    row?.classList.add("hidden");
+    log?.classList.add("hidden");
+    return;
+  }
+  btn.classList.remove("hidden");
+  const targets = [...selected].filter(id => {
+    const it = items.find(x => String(x.id) === String(id));
+    return it && categorizeStatus(it) === "draft";
+  });
+  btn.disabled = !extensionSignedIn || targets.length === 0;
+  if (row) row.classList.toggle("hidden", targets.length <= 1);
+}
+
+function publishLog(msg, cls = "") {
+  const el = document.getElementById("publishDraftsLog");
+  if (!el) return;
+  el.classList.remove("hidden");
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  const ts = new Date().toLocaleTimeString();
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+const _origUpdateSel = updateSel;
+updateSel = function() {
+  _origUpdateSel();
+  updatePublishDraftsVisibility();
+};
+
+document.getElementById("publishDraftsBtn")?.addEventListener("click", async () => {
+  const target = [...selected]
+    .map(id => items.find(x => String(x.id) === String(id)))
+    .filter(it => it && categorizeStatus(it) === "draft");
+  if (!target.length) { $("#itemsStatus").textContent = "Zaznacz szkice do wystawienia"; return; }
+
+  const tab = await getVintedTab();
+  if (!tab) { publishLog("Otwórz zalogowaną kartę vinted.*", "err"); return; }
+
+  const $mn = document.getElementById("publishDelayMin");
+  const $mx = document.getElementById("publishDelayMax");
+  let dMin = parseInt($mn?.value) || PUBLISH_DELAY_DEFAULTS.publishDelayMin;
+  let dMax = parseInt($mx?.value) || PUBLISH_DELAY_DEFAULTS.publishDelayMax;
+  if (dMax < dMin) dMax = dMin;
+  try { await chrome.storage.local.set({ publishDelayMin: dMin, publishDelayMax: dMax }); } catch {}
+
+  if (!confirm(`Wystawić ${target.length} szkiców na Vinted?`)) return;
+
+  const btn = document.getElementById("publishDraftsBtn");
+  btn.disabled = true;
+  document.getElementById("publishDraftsLog").classList.remove("hidden");
+
+  let ok = 0, fail = 0;
+  for (let i = 0; i < target.length; i++) {
+    const it = target[i];
+    if (i > 0 && target.length > 1) {
+      const wait = Math.floor(dMin + Math.random() * (dMax - dMin + 1));
+      publishLog(`⏳ Czekam ${wait}s…`);
+      await new Promise(r => setTimeout(r, wait * 1000));
+    }
+    publishLog(`(${i+1}/${target.length}) ${it.title || "#" + it.id}`);
+    try {
+      const r = await vintedMsg(tab.id, { kind: "PUBLISH_DRAFT_V2", id: it.id });
+      if (r?.ok) {
+        publishLog(`  ✓ opublikowano (ID ${r.id})`, "ok");
+        items = items.filter(x => String(x.id) !== String(it.id));
+        selected.delete(String(it.id));
+        ok++;
+      } else {
+        publishLog(`  ✗ ${r?.error || "nieznany błąd"}`, "err");
+        fail++;
+      }
+    } catch (e) {
+      publishLog(`  ✗ ${e.message}`, "err");
+      fail++;
+    }
+  }
+  publishLog(`— gotowe — sukces: ${ok}, błędy: ${fail}`);
+  renderItems();
+  updateSel();
+  btn.disabled = false;
+  try { await loadItems(); } catch {}
+});
+
+initPublishDraftsUI();
