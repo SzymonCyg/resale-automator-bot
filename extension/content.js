@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.12";
+  const CONTENT_VERSION = "0.9.13";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -98,6 +98,37 @@
       window.addEventListener("message", onMessage);
       window.postMessage({ source: "VM_CONTENT_058", id, kind, ...payload }, origin);
     });
+  }
+
+  let alCaptchaInProgress = false;
+  let alCaptchaLastFailAt = 0;
+
+  function solveCaptchaViaBridge(captchaUrl) {
+    return bridgeRequest("SOLVE_CAPTCHA", { captchaUrl, timeout: 180000 }, 190000);
+  }
+
+  async function handleCaptchaIfNeeded(res) {
+    const captchaUrl = res?.captchaUrl;
+    if (!captchaUrl) return false;
+    if (alCaptchaInProgress) return false;
+    alCaptchaInProgress = true;
+    try {
+      if (typeof alPushStat === "function") await alPushStat("🔐 Vinted wymaga weryfikacji — otwieram captchę...");
+      const result = await solveCaptchaViaBridge(captchaUrl);
+      if (result?.solved) {
+        if (typeof alPushStat === "function") await alPushStat("✅ Weryfikacja zakończona — wznawiam");
+        return true;
+      }
+      alCaptchaLastFailAt = Date.now();
+      if (result?.hardblock) {
+        if (typeof alPushStat === "function") await alPushStat("⛔ Vinted zablokował dostęp (hardblock) — spróbuj później");
+      } else {
+        if (typeof alPushStat === "function") await alPushStat("⚠ Weryfikacja nieukończona — spróbuj ręcznie odświeżyć Vinted");
+      }
+      return false;
+    } finally {
+      alCaptchaInProgress = false;
+    }
   }
 
   function pageFetch(path, init = {}) {
@@ -680,9 +711,9 @@
     return collected;
   }
 
-  async function alCreateConversation(itemId, oppositeUserId, csrfToken) {
+  async function alCreateConversationRaw(itemId, oppositeUserId, csrfToken) {
     const referrer = new URL(`/inbox/want_it?receiver_id=${oppositeUserId}&item_id=${itemId}`, window.location.origin).toString();
-    return vintedApi(`/api/v2/conversations`, {
+    return vintedRaw(`/api/v2/conversations`, {
       method: "POST",
       csrfToken,
       referrer,
@@ -694,35 +725,51 @@
     });
   }
 
+  async function alCreateConversation(itemId, oppositeUserId, csrfToken) {
+    const res = await alCreateConversationRaw(itemId, oppositeUserId, csrfToken);
+    if (!res?.ok) {
+      const err = new Error(`Vinted ${res?.status}${res?.text ? `: ${res.text.slice(0,250)}` : ""}`);
+      err.status = res?.status;
+      err.code = res?.json?.code;
+      err.message_code = res?.json?.message_code;
+      err.captchaUrl = res?.captchaUrl;
+      throw err;
+    }
+    return res.json;
+  }
+
   class AlSkipUser extends Error {}
 
   async function alCreateConversationSafe(itemId, userId, csrfToken) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
       try {
         const r = await alCreateConversation(itemId, userId, csrfToken);
-        if (r && r.code === 106) throw new AlSkipUser(`zablokowany/nieaktywny (kod 106)`);
-        if (r && r.message_code === 'access_denied') throw new AlSkipUser(`brak dostępu (${r.message || 'access_denied'})`);
         if (r && r.message_code === 'rate_limit_exceeded') {
-          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
+          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/4) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
         }
         return r;
       } catch (e) {
         if (e instanceof AlSkipUser) throw e;
+        if (e.captchaUrl) {
+          const solved = await handleCaptchaIfNeeded({ captchaUrl: e.captchaUrl });
+          if (solved) { await alSleep(alRand(1500, 3000)); continue; }
+          throw new AlSkipUser(`weryfikacja captcha nieukończona`);
+        }
         const msg = String(e?.message || e);
-        if (msg.includes('access_denied') || (msg.includes('403') && msg.includes('106'))) {
-          throw new AlSkipUser(`brak dostępu (${msg.slice(0,120)})`);
+        if (e.code === 106 || e.message_code === 'access_denied' || msg.includes('access_denied')) {
+          throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
         }
         if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
-          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
+          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/4) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
         }
         throw e;
       }
     }
-    throw new Error('Rate limit — przekroczono liczbę prób');
+    throw new Error('Przekroczono liczbę prób');
   }
 
   function alCalcDiscount(orig, amount, unit) {
