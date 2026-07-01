@@ -1214,9 +1214,6 @@ function importValidateRow(it) {
   return w;
 }
 
-function importEscapeHtml(s) {
-  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
 
 function renderImportPreview() {
   const box = document.getElementById("importPreview");
