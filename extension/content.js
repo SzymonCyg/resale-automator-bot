@@ -343,8 +343,8 @@
     if (!pub) return { brand: "", size: "", category: "", colors: [] };
     const t = (v) => (v && typeof v === "object" ? (v.title || v.name || "") : (v || ""));
     const brand = pub.brand_title || t(pub.brand_dto) || t(pub.brand) || "";
-    const size = pub.size_title || t(pub.size) || "";
-    const category = pub.catalog_title || t(pub.catalog) || t(pub.category) || "";
+    const size = pub.size || pub.size_title || t(pub.size_dto) || "";
+    const category = pub.catalog_branch_title || pub.catalog_title || t(pub.catalog) || t(pub.category) || "";
     const colors = [
       t(pub.color1) || pub.color1_title || "",
       t(pub.color2) || pub.color2_title || "",
