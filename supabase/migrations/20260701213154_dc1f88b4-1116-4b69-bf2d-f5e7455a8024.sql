@@ -1,0 +1,1 @@
+ALTER TABLE public.vinted_items ADD COLUMN IF NOT EXISTS photo_urls jsonb NOT NULL DEFAULT '[]'::jsonb;

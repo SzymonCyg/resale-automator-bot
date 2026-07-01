@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.22";
+  const CONTENT_VERSION = "1.0.6";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -282,7 +282,7 @@
       if (s === "hidden") return "hidden";
       if (s === "reserved") return "reserved";
       if (s === "active" || s === "visible" || s === "1") return "active";
-      return "active"; // domyślnie aktywny jak robi Dotb
+      return "active"; // domyślnie aktywny
     }
     return {
       id: it.id,

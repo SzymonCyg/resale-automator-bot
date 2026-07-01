@@ -89,6 +89,7 @@ export type Database = {
           id: string
           last_bumped_at: string | null
           photo_url: string | null
+          photo_urls: Json
           price: number | null
           raw: Json | null
           size_title: string | null
@@ -111,6 +112,7 @@ export type Database = {
           id?: string
           last_bumped_at?: string | null
           photo_url?: string | null
+          photo_urls?: Json
           price?: number | null
           raw?: Json | null
           size_title?: string | null
@@ -133,6 +135,7 @@ export type Database = {
           id?: string
           last_bumped_at?: string | null
           photo_url?: string | null
+          photo_urls?: Json
           price?: number | null
           raw?: Json | null
           size_title?: string | null

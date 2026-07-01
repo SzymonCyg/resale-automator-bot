@@ -234,6 +234,107 @@ $("#syncItems").addEventListener("click", async () => {
     $("#itemsStatus").textContent = "Błąd synchr.: " + e.message;
   }
 });
+
+async function mirrorItemPhotos(vintedItemId, photoUrls) {
+  const { session, supabaseUrl, supabaseAnonKey } = await chrome.storage.local.get([
+    "session", "supabaseUrl", "supabaseAnonKey",
+  ]);
+  const base = supabaseUrl || "https://vdkxhhgoloiylkscessp.supabase.co";
+  const token = session?.access_token || "";
+  const anon = supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZka3hoaGdvbG9peWxrc2Nlc3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NjYxMjUsImV4cCI6MjA5ODI0MjEyNX0.ZQzRkY2Utf405okkc0b-JJK2zXW40C0EM9XxlzWUOek";
+  if (!token) throw new Error("Zaloguj się w panelu (brak sesji).");
+  const res = await fetch(`${base}/functions/v1/mirror-item-photo`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+      "apikey": anon,
+    },
+    body: JSON.stringify({ vinted_item_id: String(vintedItemId), photo_urls: photoUrls || [] }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return { urls: Array.isArray(data.urls) ? data.urls : [] };
+}
+
+$("#exportPhotosBtn").addEventListener("click", async () => {
+  const btn = $("#exportPhotosBtn");
+  const status = $("#exportPhotosStatus");
+  if (typeof XLSX === "undefined") { status.textContent = "Błąd: brak biblioteki XLSX"; return; }
+  const tab = await getVintedTab();
+  if (!tab) { status.textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
+
+  const target = selected.size
+    ? items.filter((it) => selected.has(String(it.id)))
+    : items.slice();
+  if (!target.length) { status.textContent = "Brak przedmiotów do eksportu"; return; }
+
+  btn.disabled = true;
+  const rows = [];
+  let totalPhotos = 0;
+  let maxPhotos = 0;
+
+  for (let i = 0; i < target.length; i++) {
+    const it = target[i];
+    status.textContent = `Przetwarzam ${i + 1}/${target.length}…`;
+    try {
+      const r = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL_V2", id: it.id });
+      const detail = r?.item || it;
+      let photoUrls = (detail.photos || [])
+        .map((p) => p?.full_size_url || p?.url)
+        .filter(Boolean);
+      if (!photoUrls.length && it.photo_url) photoUrls = [it.photo_url];
+      let mirrored = [];
+      try {
+        const m = await mirrorItemPhotos(it.id, photoUrls);
+        mirrored = m.urls;
+      } catch (e) {
+        console.warn("mirror failed", it.id, e);
+      }
+      totalPhotos += mirrored.length;
+      if (mirrored.length > maxPhotos) maxPhotos = mirrored.length;
+      rows.push({
+        _it: it,
+        _detail: detail,
+        _photos: mirrored,
+      });
+    } catch (e) {
+      console.warn("item failed", it.id, e);
+      rows.push({ _it: it, _detail: it, _photos: [] });
+    }
+    await new Promise((res) => setTimeout(res, 300 + Math.random() * 300));
+  }
+
+  const outRows = rows.map(({ _it, _detail, _photos }) => {
+    const row = {
+      "ID": _it.id,
+      "Tytuł": _it.title || "",
+      "Marka": _it.brand || _detail?.brand?.title || "",
+      "Rozmiar": _it.size_title || _detail?.size_title || "",
+      "Cena": _it.price ?? "",
+      "Waluta": _it.currency || "",
+      "Status": _it.status || "",
+      "Wyświetlenia": _it.view_count ?? _it.views ?? "",
+      "Polubienia": _it.favourite_count ?? "",
+      "Wystawiony": _it.created_at_ts ? new Date(_it.created_at_ts * 1000).toISOString() : (_detail?.created_at || ""),
+      "URL": _it.url || "",
+      "Opis": _detail?.description || _it.description || "",
+    };
+    for (let i = 0; i < maxPhotos; i++) {
+      row[`Zdjęcie_${i + 1}`] = _photos[i] || "";
+    }
+    return row;
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(outRows);
+  XLSX.utils.book_append_sheet(wb, ws, "Przedmioty");
+  XLSX.writeFile(wb, "vinted-ze-zdjeciami.xlsx");
+
+  status.textContent = `✓ Wyeksportowano ${outRows.length} przedmiotów (${totalPhotos} zdjęć)`;
+  btn.disabled = false;
+});
 $("#selAll").addEventListener("change", (e) => {
   const checked = e.target.checked;
   getFilteredItems().forEach((it) => (checked ? selected.add(String(it.id)) : selected.delete(String(it.id))));

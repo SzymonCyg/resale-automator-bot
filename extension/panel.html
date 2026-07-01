@@ -53,6 +53,8 @@
           <div class="left">
             <button id="refreshItems" class="btn">↻ Odśwież</button>
             <button id="syncItems" class="btn">☁ Synchronizuj do panelu</button>
+            <button id="exportPhotosBtn" class="btn">📥 Eksportuj ze zdjęciami</button>
+            <span id="exportPhotosStatus" class="muted"></span>
             <select id="filterStatus" class="btn ghost" style="padding:6px 10px">
               <option value="all">Wszystkie</option>
               <option value="active">Aktywne</option>
@@ -334,6 +336,7 @@
       </div>
     </div>
 
+    <script src="vendor/xlsx.full.min.js"></script>
     <script src="panel.js"></script>
   </body>
 </html>
