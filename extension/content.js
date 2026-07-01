@@ -920,7 +920,11 @@
   async function alLoopOnce() {
     const s = await alGetSettings();
     if (!s.autoLikesEnabled) return false;
-    const csrfToken = readCsrfToken();
+
+    if (alInCooldown()) {
+      await alPushStat(`⏳ Rate limit — wznowię za ~${alCooldownMinutesLeft()} min`);
+      return true;
+    }
 
     let likes = [];
     try { likes = await alGetNotifications(s); }
@@ -932,6 +936,11 @@
     for (const like of likes) {
       const cur = await alGetSettings();
       if (!cur.autoLikesEnabled) return false;
+      if (alInCooldown()) {
+        await alPushStat(`⏳ Rate limit — wznowię za ~${alCooldownMinutesLeft()} min`);
+        break;
+      }
+      const csrfToken = readCsrfToken();
       try {
         const convRes = await alCreateConversationSafe(like.itemId, like.userId, csrfToken);
         const conv = convRes?.conversation || convRes?.thread || convRes;
@@ -976,6 +985,10 @@
         const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
         await alSleep(msgDelay);
       } catch (e) {
+        if (e instanceof AlRateLimited) {
+          await alPushStat(`⏳ ${e.message}`);
+          break;
+        }
         if (!(e instanceof AlSkipUser)) {
           const errMsg = e.message || String(e);
           await alPushStat(`✗ Przerwano dla @${like.login || like.userId}: ${errMsg}`);
@@ -986,7 +999,7 @@
       }
     }
 
-    if (alMode === 'backlog') {
+    if (alMode === 'backlog' && !alInCooldown()) {
       alMode = 'live';
       await alPushStat(`✅ Historia przetworzona — tryb live`);
     }
