@@ -286,6 +286,14 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
       try {
         const lab = await vintedMsg(tab.id, { kind: "FETCH_ITEM_LABELS_V2", id: it.id });
         labels = lab?.labels || null;
+        if (i === 0) {
+          try {
+            const dbg = lab?.diag ? JSON.stringify(lab.diag) : "brak diag";
+            const el = document.getElementById("exportDebug");
+            if (el) el.textContent = "DIAG (1. przedmiot): " + dbg;
+            console.log("VM_LABELS_DIAG", lab?.diag);
+          } catch {}
+        }
       } catch (e) { console.warn("labels failed", it.id, e); }
       let photoUrls = (detail.photos || [])
         .map((p) => p?.full_size_url || p?.url)
