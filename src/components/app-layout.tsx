@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu, X, Sun, Moon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/vinted.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/hooks/use-theme";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -111,11 +112,27 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
         );
       })}
 
-      <div className="mt-auto">
+      <div className="mt-auto space-y-1">
+        <ThemeToggle />
         <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start" size="sm">
           <LogOut className="mr-2 h-4 w-4" /> Wyloguj
         </Button>
       </div>
     </nav>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <button
+      onClick={toggle}
+      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50"
+      aria-label="Przełącz motyw"
+    >
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      <span>{isDark ? "Jasny motyw" : "Ciemny motyw"}</span>
+    </button>
   );
 }
