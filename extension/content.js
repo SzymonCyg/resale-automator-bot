@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.9";
+  const CONTENT_VERSION = "1.0.10";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -329,6 +329,31 @@
     throw lastErr || new Error("Nie mogę pobrać szczegółów przedmiotu");
   }
 
+  async function fetchPublicItem(id) {
+    try {
+      const res = await vintedRaw(`/api/v2/items/${id}`, {});
+      if (!res?.ok) return null;
+      const text = res?.text || "";
+      if (text.trimStart().startsWith("<")) return null;
+      return res?.json?.item || res?.json || null;
+    } catch { return null; }
+  }
+
+  function extractLabels(pub) {
+    if (!pub) return { brand: "", size: "", category: "", colors: [] };
+    const t = (v) => (v && typeof v === "object" ? (v.title || v.name || "") : (v || ""));
+    const brand = pub.brand_title || t(pub.brand_dto) || t(pub.brand) || "";
+    const size = pub.size_title || t(pub.size) || "";
+    const category = pub.catalog_title || t(pub.catalog) || t(pub.category) || "";
+    const colors = [
+      t(pub.color1) || pub.color1_title || "",
+      t(pub.color2) || pub.color2_title || "",
+    ].filter(Boolean);
+    return { brand, size, category, colors };
+  }
+
+
+
   const STATUS_LABEL_TO_ID = {
     "new with tags": 1, "nowy z metką": 1, "nowy z metka": 1, "neu mit etikett": 1, "neuf avec étiquette": 1,
     "new without tags": 2, "nowy bez metki": 2, "neu ohne etikett": 2, "neuf sans étiquette": 2,
@@ -629,7 +654,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
@@ -638,6 +663,7 @@
           sendResponse({ ok: true, username: me?.login, userId: me?.id, photo: me?.photo?.url });
         }
         else if (msg.kind === "FETCH_ITEM_DETAIL" || msg.kind === "FETCH_ITEM_DETAIL_V2") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
+        else if (msg.kind === "FETCH_ITEM_LABELS_V2") sendResponse({ ok: true, labels: extractLabels(await fetchPublicItem(msg.id)) });
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
         else if (msg.kind === "RUN_REPLIES" || msg.kind === "RUN_REPLIES_V2") { await runReplies(); sendResponse({ ok: true }); }
