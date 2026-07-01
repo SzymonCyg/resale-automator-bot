@@ -741,32 +741,35 @@
   class AlSkipUser extends Error {}
 
   async function alCreateConversationSafe(itemId, userId, csrfToken) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
       try {
         const r = await alCreateConversation(itemId, userId, csrfToken);
-        if (r && r.code === 106) throw new AlSkipUser(`zablokowany/nieaktywny (kod 106)`);
-        if (r && r.message_code === 'access_denied') throw new AlSkipUser(`brak dostępu (${r.message || 'access_denied'})`);
         if (r && r.message_code === 'rate_limit_exceeded') {
-          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
+          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/4) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
         }
         return r;
       } catch (e) {
         if (e instanceof AlSkipUser) throw e;
+        if (e.captchaUrl) {
+          const solved = await handleCaptchaIfNeeded({ captchaUrl: e.captchaUrl });
+          if (solved) { await alSleep(alRand(1500, 3000)); continue; }
+          throw new AlSkipUser(`weryfikacja captcha nieukończona`);
+        }
         const msg = String(e?.message || e);
-        if (msg.includes('access_denied') || (msg.includes('403') && msg.includes('106'))) {
-          throw new AlSkipUser(`brak dostępu (${msg.slice(0,120)})`);
+        if (e.code === 106 || e.message_code === 'access_denied' || msg.includes('access_denied')) {
+          throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
         }
         if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
-          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
+          await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/4) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
           continue;
         }
         throw e;
       }
     }
-    throw new Error('Rate limit — przekroczono liczbę prób');
+    throw new Error('Przekroczono liczbę prób');
   }
 
   function alCalcDiscount(orig, amount, unit) {
