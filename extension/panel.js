@@ -208,6 +208,7 @@ function renderItems() {
     }),
   );
   updateSel();
+  updatePublishDraftsVisibility();
 }
 
 function updateSel() {
