@@ -242,6 +242,25 @@
             </div>
           </div>
 
+          <div class="al-row">
+            <label class="al-label">Opóźnienie między ogłoszeniami</label>
+            <div class="al-slider-wrap">
+              <div class="al-slider-labels">
+                <span id="relistDelayMinLabel">30s</span>
+                <span class="muted">–</span>
+                <span id="relistDelayMaxLabel">45s</span>
+              </div>
+              <div class="al-dual-slider" id="relistDelaySlider">
+                <div class="slider-track"></div>
+                <div class="slider-range" id="relistDelayRange"></div>
+                <input type="range" class="slider-min" id="relistDelayMin" min="15" max="300" step="1" value="30" />
+                <input type="range" class="slider-max" id="relistDelayMax" min="15" max="300" step="1" value="45" />
+              </div>
+              <div class="al-slider-limits"><span>15s</span><span>300s</span></div>
+            </div>
+          </div>
+
+
           <div class="relist-list-wrap">
             <h3 class="opt-title">Zaznaczone przedmioty</h3>
             <div id="relistSummary" class="relist-summary">Wczytuję...</div>
