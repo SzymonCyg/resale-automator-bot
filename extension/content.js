@@ -266,6 +266,17 @@
   }
 
   function normalize(it) {
+    // DEBUG — usuń po diagnozie
+    console.log("[VM DEBUG] item status raw:", {
+      id: it.id,
+      title: it.title?.slice(0, 30),
+      status: it.status,
+      status_type: typeof it.status,
+      can_push_up: it.can_push_up,
+      is_visible: it.is_visible,
+      moderation_status: it.moderation_status,
+      draft_state: it.draft_state,
+    });
     return {
       id: it.id,
       title: it.title,
