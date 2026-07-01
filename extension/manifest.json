@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vinted Manager Helper",
-  "version": "0.9.27",
+  "version": "0.9.28",
   "description": "Panel do zarządzania kontami Vinted: podgląd przedmiotów, ponowne wystawianie z edycją zdjęć i cen, auto-odpowiedzi.",
   "permissions": [
     "storage",
@@ -38,7 +38,7 @@
     "https://api.vinted.net/*",
     "https://geo.captcha-delivery.com/*",
     "https://*.captcha-delivery.com/*",
-    "https://api.anthropic.com/*"
+    "https://generativelanguage.googleapis.com/*"
   ],
   "externally_connectable": {
     "matches": [
