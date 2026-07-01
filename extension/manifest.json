@@ -37,7 +37,8 @@
     "https://api.vinted.com/*",
     "https://api.vinted.net/*",
     "https://geo.captcha-delivery.com/*",
-    "https://*.captcha-delivery.com/*"
+    "https://*.captcha-delivery.com/*",
+    "https://api.anthropic.com/*"
   ],
   "externally_connectable": {
     "matches": [
