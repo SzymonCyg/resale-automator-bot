@@ -338,6 +338,9 @@ async function openRelist() {
   $("#relistDelayMaxLabel").textContent = `${rdMax}s`;
   initDualSlider("#relistDelayMin", "#relistDelayMax", "#relistDelayRange", "#relistDelayMinLabel", "#relistDelayMaxLabel");
 
+  const delayRow = document.getElementById("relistDelayRow");
+  if (delayRow) delayRow.classList.toggle("hidden", chosen.length <= 1);
+
 
   // reset modes
   photoMode = "auto"; priceMode = "keep"; textMode = "ai";
