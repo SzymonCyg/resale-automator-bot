@@ -603,14 +603,62 @@ async function exportPhoto(p, mode) {
   return await c.convertToBlob({ type: "image/jpeg", quality: 0.92 });
 }
 
+async function paraphraseWithAI(title, description) {
+  const prompt = `Jesteś pomocnikiem sprzedawcy na Vinted. Przepisz tytuł i opis ogłoszenia tak, aby miały to samo znaczenie, ale były wyrażone nieco innymi słowami (drobne zmiany synonimów, kolejność słów, ewentualnie skróty). Tytuł musi być krótki (max 60 znaków). Nie zmieniaj informacji o marce, rozmiarze, stanie ani cenie.
+
+Tytuł: ${title}
+Opis: ${description || "(brak opisu)"}
+
+Odpowiedz TYLKO w formacie JSON (bez żadnego tekstu poza JSON):
+{"title": "...", "description": "..."}`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!response.ok) throw new Error(`AI API ${response.status}`);
+  const data = await response.json();
+  const text = data.content?.find(b => b.type === "text")?.text || "";
+  const clean = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+
 $("#runRelist").addEventListener("click", async () => {
   const tab = await getVintedTab();
   if (!tab) return log("✗ Brak otwartej karty Vinted", "err");
   $("#runRelist").disabled = true;
-  for (const st of relistState) {
+
+  for (let idx = 0; idx < relistState.length; idx++) {
+    const st = relistState[idx];
+
+    if (idx > 0) {
+      const delaySec = Math.floor(15 + Math.random() * (300 - 15));
+      log(`⏳ Czekam ${delaySec}s przed kolejnym ogłoszeniem...`);
+      await new Promise(r => setTimeout(r, delaySec * 1000));
+    }
+
     const finalPrice = computePrice(st);
     log(`→ ${st.title} (${finalPrice} ${st.currency})...`);
     try {
+      let aiTitle = st.title;
+      let aiDesc = st.description;
+      try {
+        const aiResult = await paraphraseWithAI(st.title, st.description);
+        if (aiResult) {
+          aiTitle = aiResult.title || st.title;
+          aiDesc = aiResult.description || st.description;
+          log(`🤖 Tytuł: "${aiTitle}"`);
+        }
+      } catch (aiErr) {
+        log(`⚠ AI niedostępne — używam oryginału`, "");
+      }
+
       const photos = [];
       for (const p of st.photos) {
         const blob = await exportPhoto(p, photoMode);
@@ -623,8 +671,8 @@ $("#runRelist").addEventListener("click", async () => {
         ...detail.item,
         id: st.item.id,
         currency: st.currency,
-        title: st.title,
-        description: st.description,
+        title: aiTitle,
+        description: aiDesc,
       };
       const r = await vintedMsg(tab.id, {
         kind: "RELIST_ITEM_V2",
@@ -635,7 +683,7 @@ $("#runRelist").addEventListener("click", async () => {
       });
       if (r?.ok) {
         const delMsg = r.deletedOld ? ", stare usunięte" : `, ⚠ usunięcie starego: ${r.deleteError || "fail"}`;
-        log(`✓ ${st.title} — nowy ID ${r.newId}${delMsg}`, "ok");
+        log(`✓ ${aiTitle} — nowy ID ${r.newId}${delMsg}`, "ok");
       } else {
         log(`✗ ${st.title}: ${r?.error || "fail"}`, "err");
       }
@@ -643,6 +691,7 @@ $("#runRelist").addEventListener("click", async () => {
       log(`✗ ${st.title}: ${e.message}`, "err");
     }
   }
+
   $("#runRelist").disabled = false;
   log("— gotowe —", "ok");
 });
