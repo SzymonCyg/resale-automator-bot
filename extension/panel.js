@@ -1000,8 +1000,73 @@ chrome.storage.onChanged.addListener((changes) => {
   }
 });
 
+// ========== THEME SYSTEM ==========
+let currentTheme = 'dark';
+
+async function detectVintedTheme() {
+  try {
+    const tab = await getVintedTab();
+    if (!tab) return null;
+    const r = await chrome.tabs.sendMessage(tab.id, { kind: 'GET_VINTED_THEME' }).catch(() => null);
+    return r?.theme || null;
+  } catch { return null; }
+}
+
+async function applyTheme(theme) {
+  currentTheme = theme;
+  document.body.classList.toggle('theme-light', theme === 'light');
+  document.body.classList.toggle('theme-dark', theme === 'dark');
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+  const stored = (await chrome.storage.local.get(['themeOverride'])).themeOverride || 'auto';
+  document.querySelectorAll('.theme-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.theme === stored)
+  );
+}
+
+async function initTheme() {
+  const { themeOverride } = await chrome.storage.local.get(['themeOverride']);
+  if (themeOverride === 'light' || themeOverride === 'dark') {
+    await applyTheme(themeOverride);
+    return;
+  }
+  const vintedTheme = await detectVintedTheme();
+  if (vintedTheme) { await applyTheme(vintedTheme); return; }
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  await applyTheme(prefersDark ? 'dark' : 'light');
+}
+
+async function setThemeOverride(value) {
+  if (value === 'auto') {
+    await chrome.storage.local.remove(['themeOverride']);
+    await initTheme();
+  } else {
+    await chrome.storage.local.set({ themeOverride: value });
+    await applyTheme(value);
+  }
+  const stored = value === 'auto' ? 'auto' : value;
+  document.querySelectorAll('.theme-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.theme === stored)
+  );
+}
+// ========== END THEME SYSTEM ==========
+
+document.addEventListener('DOMContentLoaded', () => {
+  const themeToggleBtn = document.getElementById('themeToggle');
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', async () => {
+      const next = currentTheme === 'dark' ? 'light' : 'dark';
+      await setThemeOverride(next);
+    });
+  }
+  document.querySelectorAll('.theme-btn').forEach(b => {
+    b.addEventListener('click', () => setThemeOverride(b.dataset.theme));
+  });
+});
+
 // ---------- BOOT ----------
 async function boot() {
+  await initTheme();
   const status = await bg("GET_STATUS");
   if (status?.signedIn) {
     await enterMain();
