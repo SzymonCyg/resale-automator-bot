@@ -716,6 +716,7 @@
   let alLatestId = null;
   let alLatestDate = null;
   let alMode = 'idle';
+  let alStartTime = 0;
 
   async function alGetNotifications(settings) {
     const timeFilterSec = settings.autoLikesTimeFilter || 0;
@@ -746,6 +747,7 @@
           if (alProcessedIds.has(like.notifId)) continue;
           collected.push(like);
         } else {
+          if (alStartTime && updatedAt && updatedAt.getTime() < alStartTime) { continue; }
           if (alLatestDate && updatedAt && updatedAt <= alLatestDate) { stop = true; break; }
           if (alLatestId && like.notifId === alLatestId) { stop = true; break; }
           if (alProcessedIds.has(like.notifId)) continue;
@@ -1025,6 +1027,7 @@
       if (!acquired) return;
       alStartHeartbeat();
       const s0 = await alGetSettings();
+      alStartTime = Date.now();
       alMode = (s0.autoLikesTimeFilter || 0) > 0 ? 'backlog' : 'live';
       await alPushStat(`🔍 Tryb: ${alMode === 'backlog' ? `historyczne (${s0.autoLikesTimeFilter}s wstecz)` : 'tylko nowe'}`);
       while (true) {
