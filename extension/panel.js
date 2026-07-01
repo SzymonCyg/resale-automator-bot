@@ -727,15 +727,22 @@ $("#runRelist").addEventListener("click", async () => {
     try {
       let aiTitle = st.title;
       let aiDesc = st.description;
-      try {
-        const aiResult = await paraphraseWithAI(st.title, st.description);
-        if (aiResult) {
-          aiTitle = aiResult.title || st.title;
-          aiDesc = aiResult.description || st.description;
-          log(`🤖 Tytuł: "${aiTitle}"`);
+      if (textMode === "ai") {
+        try {
+          const lang = st.currency === 'PLN' ? 'pl'
+            : st.currency === 'GBP' ? 'en'
+            : st.currency === 'CZK' ? 'cs'
+            : st.currency === 'EUR' ? 'de'
+            : 'pl';
+          const aiResult = await paraphraseWithAI(st.title, st.description, lang);
+          if (aiResult) {
+            aiTitle = aiResult.title || st.title;
+            aiDesc = aiResult.description || st.description;
+            log(`🤖 Tytuł: "${aiTitle}"`);
+          }
+        } catch (aiErr) {
+          log(`⚠ AI niedostępne (${aiErr.message}) — używam oryginału`, "");
         }
-      } catch (aiErr) {
-        log(`⚠ AI niedostępne — używam oryginału`, "");
       }
 
       const photos = [];
