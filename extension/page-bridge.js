@@ -12,10 +12,29 @@
       ?.split("=")[1];
   }
 
+  function extractCsrfFromScripts() {
+    const scripts = document.querySelectorAll("script");
+    const patterns = [
+      /"CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/,
+      /\\"CSRF_TOKEN\\":\\"([^"\\]+)/,
+      /"csrfToken\\?"\s*:\s*\\?"([^"\\]+)/,
+    ];
+    for (const s of scripts) {
+      const txt = s.textContent || "";
+      if (!txt.includes("CSRF") && !txt.includes("csrf")) continue;
+      for (const re of patterns) {
+        const m = txt.match(re);
+        if (m && m[1]) return m[1];
+      }
+    }
+    return "";
+  }
+
   function readCsrfToken() {
     return window.__VM_CSRF_TOKEN__
+      || extractCsrfFromScripts()
       || document.querySelector('meta[name="csrf-token"]')?.content
-      || document.documentElement.innerHTML.match(/CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
+      || document.documentElement.innerHTML.match(/"CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
       || document.documentElement.innerHTML.match(/"csrfToken"\s*:\s*"([^"]+)"/i)?.[1]
       || document.documentElement.innerHTML.match(/"csrf_token"\s*:\s*"([^"]+)"/i)?.[1]
       || "";
