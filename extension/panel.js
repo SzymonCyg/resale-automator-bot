@@ -153,13 +153,28 @@ async function loadItems() {
   }
 }
 
+let filterStatus = "all";
+
+function isActiveStatus(it) {
+  const s = it.status;
+  return s === "active" || s === "visible" || s === "1" || s === 1;
+}
+
+function getFilteredItems() {
+  if (filterStatus === "active") return items.filter(isActiveStatus);
+  if (filterStatus === "inactive") return items.filter((it) => !isActiveStatus(it));
+  return items;
+}
+
 function renderItems() {
   const body = $("#itemsBody");
-  if (!items.length) {
+  const filtered = getFilteredItems();
+  if (!filtered.length) {
     body.innerHTML = `<tr><td colspan="8" class="empty">Brak przedmiotów.</td></tr>`;
+    updateSel();
     return;
   }
-  body.innerHTML = items.map((it) => `
+  body.innerHTML = filtered.map((it) => `
     <tr data-id="${it.id}">
       <td><input type="checkbox" class="sel" data-id="${it.id}" ${selected.has(String(it.id)) ? "checked" : ""}/></td>
       <td>${it.photo_url ? `<img class="thumb" src="${it.photo_url}" />` : `<div class="thumb"></div>`}</td>
@@ -177,11 +192,14 @@ function renderItems() {
       updateSel();
     }),
   );
+  updateSel();
 }
 
 function updateSel() {
   $("#selCount").textContent = `${selected.size} zaznaczonych`;
   $("#relistBtn").disabled = !extensionSignedIn || selected.size === 0;
+  const del = $("#deleteBtn");
+  if (del) del.disabled = !extensionSignedIn || selected.size === 0;
 }
 
 function escapeHtml(s) {
