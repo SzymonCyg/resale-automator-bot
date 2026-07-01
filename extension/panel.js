@@ -193,8 +193,8 @@ function renderItems() {
     <tr data-id="${it.id}">
       <td><input type="checkbox" class="sel" data-id="${it.id}" ${selected.has(String(it.id)) ? "checked" : ""}/></td>
       <td>${it.photo_url ? `<img class="thumb" src="${it.photo_url}" />` : `<div class="thumb"></div>`}</td>
-      <td><a href="${it.url || "#"}" target="_blank">${escapeHtml(it.title || "")}</a><br/><span class="muted">#${it.id}</span></td>
-      <td class="muted">${escapeHtml(it.brand || "")} ${it.size_title ? "· " + escapeHtml(it.size_title) : ""}</td>
+      <td><a href="${it.url || "#"}" target="_blank">${importEscapeHtml(it.title || "")}</a><br/><span class="muted">#${it.id}</span></td>
+      <td class="muted">${importEscapeHtml(it.brand || "")} ${it.size_title ? "· " + importEscapeHtml(it.size_title) : ""}</td>
       <td style="text-align:right"><b>${it.price} ${it.currency || ""}</b></td>
       <td style="text-align:right" class="muted">${it.views ?? 0}</td>
       <td style="text-align:right" class="muted">${it.favourite_count ?? 0}</td>
@@ -217,7 +217,7 @@ function updateSel() {
   if (del) del.disabled = !extensionSignedIn || selected.size === 0;
 }
 
-function escapeHtml(s) {
+function importEscapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
@@ -1214,7 +1214,7 @@ function importValidateRow(it) {
   return w;
 }
 
-function escapeHtml(s) {
+function importEscapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
@@ -1226,15 +1226,15 @@ function renderImportPreview() {
     const warns = importValidateRow(it);
     const bad = warns.length > 0;
     const thumb = it.photos[0]
-      ? `<img src="${escapeHtml(it.photos[0])}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:4px" />`
+      ? `<img src="${importEscapeHtml(it.photos[0])}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:4px" />`
       : `<div style="width:48px;height:48px;background:#eee;border-radius:4px"></div>`;
     return `<tr style="${bad ? "background:rgba(220,50,50,.08)" : ""}">
-      <td>${bad ? '<span title="' + escapeHtml(warns.join(", ")) + '" style="color:#c33">●</span>' : ""}</td>
+      <td>${bad ? '<span title="' + importEscapeHtml(warns.join(", ")) + '" style="color:#c33">●</span>' : ""}</td>
       <td>${thumb}</td>
-      <td>${escapeHtml(it.title)}</td>
-      <td>${escapeHtml(it.price)} ${escapeHtml(it.currency)}</td>
-      <td>${escapeHtml(it.brand)}</td>
-      <td>${escapeHtml(it.size_title)}</td>
+      <td>${importEscapeHtml(it.title)}</td>
+      <td>${importEscapeHtml(it.price)} ${importEscapeHtml(it.currency)}</td>
+      <td>${importEscapeHtml(it.brand)}</td>
+      <td>${importEscapeHtml(it.size_title)}</td>
       <td style="text-align:center">${it.photos.length}</td>
     </tr>`;
   }).join("");
