@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.12";
+  const CONTENT_VERSION = "1.0.13";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -330,19 +330,23 @@
   }
 
   async function fetchPublicItem(id) {
-    try {
-      const res = await vintedRaw(`/api/v2/items/${id}`, {});
-      if (!res?.ok) return null;
-      const text = res?.text || "";
-      if (text.trimStart().startsWith("<")) return null;
-      return res?.json?.item || res?.json || null;
-    } catch { return null; }
+    for (const path of [`/api/v2/items/${id}/details`, `/api/v2/items/${id}`]) {
+      try {
+        const res = await vintedRaw(path, {});
+        if (!res?.ok) continue;
+        const text = res?.text || "";
+        if (text.trimStart().startsWith("<")) continue;
+        const item = res?.json?.item || res?.json || null;
+        if (item && (item.size != null || item.catalog_branch_title != null || item.title != null)) return item;
+      } catch {}
+    }
+    return null;
   }
 
   function extractLabels(pub) {
     if (!pub) return { brand: "", size: "", category: "", colors: [] };
     const t = (v) => (v && typeof v === "object" ? (v.title || v.name || "") : (v || ""));
-    const brand = pub.brand_title || t(pub.brand_dto) || t(pub.brand) || "";
+    const brand = pub.brand_title || t(pub.brand) || t(pub.brand_dto) || "";
     const size = pub.size || pub.size_title || t(pub.size_dto) || "";
     const category = pub.catalog_branch_title || pub.catalog_title || t(pub.catalog) || t(pub.category) || "";
     const colors = [
@@ -351,6 +355,7 @@
     ].filter(Boolean);
     return { brand, size, category, colors };
   }
+
 
 
 
@@ -699,7 +704,17 @@
           sendResponse({ ok: true, username: me?.login, userId: me?.id, photo: me?.photo?.url });
         }
         else if (msg.kind === "FETCH_ITEM_DETAIL" || msg.kind === "FETCH_ITEM_DETAIL_V2") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
-        else if (msg.kind === "FETCH_ITEM_LABELS_V2") sendResponse({ ok: true, labels: extractLabels(await fetchPublicItem(msg.id)) });
+        else if (msg.kind === "FETCH_ITEM_LABELS_V2") {
+          const pub = await fetchPublicItem(msg.id);
+          const labels = extractLabels(pub);
+          const diag = pub ? {
+            keys: Object.keys(pub).slice(0, 60),
+            size: pub.size, size_title: pub.size_title,
+            catalog_branch_title: pub.catalog_branch_title, catalog_title: pub.catalog_title, catalog_id: pub.catalog_id,
+            brand: pub.brand
+          } : { pubNull: true };
+          sendResponse({ ok: true, labels, diag });
+        }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
         else if (msg.kind === "PUBLISH_DRAFT_V2") sendResponse({ ok: true, ...(await publishExistingDraft(msg.id)) });
