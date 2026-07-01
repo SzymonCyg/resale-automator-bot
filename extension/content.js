@@ -637,12 +637,17 @@
   }
 
   async function alPushStat(line, deltaSent = 0) {
-    const cur = (await chrome.storage.local.get(["autoLikesStats"])).autoLikesStats || { sent: 0 };
+    const cur = (await chrome.storage.local.get(["autoLikesStats"])).autoLikesStats || { sent: 0, logs: [] };
+    const logs = Array.isArray(cur.logs) ? cur.logs : [];
+    const newLine = `[${new Date().toLocaleTimeString()}] ${line}`;
+    logs.push(newLine);
+    if (logs.length > 100) logs.splice(0, logs.length - 100);
     const next = {
       sent: (cur.sent || 0) + deltaSent,
       lastEvent: line,
       lastAt: Date.now(),
-      logLine: `[${new Date().toLocaleTimeString()}] ${line}`,
+      logLine: newLine,
+      logs,
     };
     await chrome.storage.local.set({ autoLikesStats: next });
   }
@@ -657,14 +662,18 @@
       linkUserId = params.get('offering_id') || params.get('user_id');
       linkItemId = params.get('item_id') || params.get('subject_id');
     }
-    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject_id ?? n?.subject?.id ?? linkItemId;
-    const userId = n?.user_id ?? n?.actor_id ?? n?.user?.id ?? n?.notifier?.id ?? n?.actor?.id ?? linkUserId;
-    const bodyLogin = (typeof n?.body === 'string' && n.body.trim()) ? n.body.trim().split(/\s+/)[0] : null;
-    const login = n?.notifier?.login ?? n?.user?.login ?? n?.actor?.login ?? bodyLogin ?? null;
+    const loginFromBody = (typeof n?.body === 'string' && n.body.trim())
+      ? n.body.trim().split(/\s+/)[0]
+      : null;
+    const itemId = n?.item_id ?? n?.entity_id ?? n?.item?.id ?? n?.subject_id ?? linkItemId;
+    // userId pochodzi z link query string (offering_id/user_id), NIE z n.user_id (to właściciel ogłoszenia)
+    const userId = linkUserId ?? n?.notifier?.id ?? n?.actor?.id ?? n?.actor_id;
+    const login = n?.notifier?.login ?? n?.actor?.login ?? loginFromBody ?? null;
     const updatedAt = n?.updated_at ?? n?.created_at ?? n?.time ?? null;
     if (!itemId || !userId) return null;
     return { notifId: String(n.id), itemId: String(itemId), userId: String(userId), login, updatedAt };
   }
+
 
   function alApiHostUrl(path) {
     const proto = window.location.protocol;
