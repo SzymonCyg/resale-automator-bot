@@ -45,6 +45,14 @@
     return new URL(path, window.location.origin).toString();
   }
 
+  function detectCaptchaUrl(json, text) {
+    let data = json;
+    if (!data && text) { try { data = JSON.parse(text); } catch {} }
+    const u = data && typeof data === "object" ? data.url : null;
+    if (typeof u === "string" && u.includes("captcha-delivery.com")) return u;
+    return null;
+  }
+
   async function toPayload(response) {
     const text = await response.text();
     let json = null;
@@ -62,6 +70,7 @@
       text,
       json,
       contentType: response.headers.get("content-type") || "",
+      captchaUrl: response.status === 403 ? detectCaptchaUrl(json, text) : null,
     };
   }
 
