@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.11";
+  const CONTENT_VERSION = "1.0.12";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -587,6 +587,42 @@
     return { id: newId, mode: "publish" };
   }
 
+  async function publishExistingDraft(id) {
+    await ensureExtensionSignedIn();
+    const csrfToken = readCsrfToken();
+    const detail = await fetchItemDetail(id);
+    if (!detail) throw new Error("Nie znaleziono szkicu");
+    const photosArr = Array.isArray(detail.photos) ? detail.photos : [];
+    const assignedPhotos = photosArr.map(p => ({ id: p.id, orientation: p.orientation ?? 0 }));
+    const photoIds = assignedPhotos.map(p => p.id).filter(Boolean);
+    if (!photoIds.length) throw new Error("Szkic nie ma zdjęć — dodaj je najpierw na Vinted");
+    const price = Number(detail?.price?.amount ?? detail?.price ?? 0);
+    if (!(price > 0)) throw new Error("Szkic nie ma ustawionej ceny");
+    const currency = detail.currency || detail?.price?.currency_code || "PLN";
+    const payload = buildDraft({
+      original: detail,
+      price,
+      currency,
+      photoIds,
+      tempUuid: detail.temp_uuid || newUuid(),
+      assignedPhotos,
+    });
+    payload.id = id;
+    try {
+      const completedRes = await vintedApi(`/api/v2/item_upload/drafts/${id}/completion`, {
+        method: "POST",
+        csrfToken,
+        body: JSON.stringify({ draft: payload, feedback_id: null, parcel: null, push_up: false, upload_session_id: payload.temp_uuid }),
+      });
+      const newId = completedRes?.item?.id ?? completedRes?.id ?? id;
+      return { id: newId };
+    } catch (e) {
+      const msg = String(e?.message || e || "");
+      if (/429|rate.?limit/i.test(msg)) throw new Error("Rate limit — spróbuj za chwilę");
+      throw new Error("Publikacja szkicu nie powiodła się: " + msg);
+    }
+  }
+
   function matchRule(text, rule) {
     if (!text || !rule?.pattern) return false;
     const t = text.toLowerCase(), p = rule.pattern.toLowerCase();
@@ -654,7 +690,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
@@ -666,6 +702,7 @@
         else if (msg.kind === "FETCH_ITEM_LABELS_V2") sendResponse({ ok: true, labels: extractLabels(await fetchPublicItem(msg.id)) });
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
+        else if (msg.kind === "PUBLISH_DRAFT_V2") sendResponse({ ok: true, ...(await publishExistingDraft(msg.id)) });
         else if (msg.kind === "RUN_REPLIES" || msg.kind === "RUN_REPLIES_V2") { await runReplies(); sendResponse({ ok: true }); }
         else if (msg.kind === "SYNC_NOW" || msg.kind === "SYNC_NOW_V2") sendResponse({ ok: true, ...(await syncToPanel()) });
         else if (msg.kind === "DELETE_ITEM_V2") sendResponse({ ok: true, ...(await deleteItemById(msg.id)) });

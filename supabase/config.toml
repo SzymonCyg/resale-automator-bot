@@ -1,1 +1,4 @@
 project_id = "vdkxhhgoloiylkscessp"
+
+[functions.cleanup-old-photos]
+verify_jwt = false
