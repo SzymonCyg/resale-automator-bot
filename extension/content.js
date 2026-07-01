@@ -687,32 +687,27 @@
       { path: `/web/api/notifications/notifications?page=${page}&per_page=20`, headers: { platform: "web" } },
       { path: `/api/v2/notifications?page=${page}&per_page=20`, headers: {} },
     ];
-    for (let attempt = 0; attempt < 3; attempt++) {
-      let rateLimited = false;
-      for (const t of tries) {
-        try {
-          const res = await vintedRaw(t.path, { headers: t.headers });
-          if (res?.ok && res?.json) {
-            const r = res.json;
-            if (r.message_code === 'rate_limit_exceeded' || r.code === 106) {
-              await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
-              rateLimited = true;
-              break;
-            }
-            const arr = r?.notifications ?? r?.data;
-            if (Array.isArray(arr)) return { notifications: arr, pagination: r?.pagination || r?.meta || {} };
+    for (const t of tries) {
+      try {
+        const res = await vintedRaw(t.path, { headers: t.headers });
+        if (res?.ok && res?.json) {
+          const r = res.json;
+          if (r.message_code === 'rate_limit_exceeded' || r.code === 106) {
+            const mins = alSetCooldown(8, 12);
+            await alPushStat(`⏳ Rate limit — wznowię za ~${mins} min`);
+            return { notifications: [], pagination: {} };
           }
-        } catch (e) {
-          const msg = String(e?.message || e);
-          if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
-            await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
-            rateLimited = true;
-            break;
-          }
+          const arr = r?.notifications ?? r?.data;
+          if (Array.isArray(arr)) return { notifications: arr, pagination: r?.pagination || r?.meta || {} };
+        }
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
+          const mins = alSetCooldown(8, 12);
+          await alPushStat(`⏳ Rate limit — wznowię za ~${mins} min`);
+          return { notifications: [], pagination: {} };
         }
       }
-      if (rateLimited) { await alSleep(alRand(90000, 120000)); continue; }
-      break;
     }
     return { notifications: [], pagination: {} };
   }
