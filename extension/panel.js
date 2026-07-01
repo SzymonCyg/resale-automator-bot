@@ -381,6 +381,7 @@ $("#selAll").addEventListener("change", (e) => {
 $("#filterStatus").addEventListener("change", (e) => {
   filterStatus = e.target.value;
   renderItems();
+  updatePublishDraftsVisibility();
 });
 $("#deleteBtn").addEventListener("click", async () => {
   if (!selected.size) return;
