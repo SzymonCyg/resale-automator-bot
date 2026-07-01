@@ -570,7 +570,7 @@
     autoLikesDiscountUnit: '%',
     autoLikesDelayNotifMin: 60000,
     autoLikesDelayNotifMax: 120000,
-    autoLikesMsgDelayMin: 30000,
+    autoLikesMsgDelayMin: 15000,
     autoLikesMsgDelayMax: 60000,
     autoLikesMinGapMs: 8000,
     autoLikesTimeFilter: 0,
