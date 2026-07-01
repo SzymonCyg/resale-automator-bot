@@ -282,7 +282,7 @@
       if (s === "hidden") return "hidden";
       if (s === "reserved") return "reserved";
       if (s === "active" || s === "visible" || s === "1") return "active";
-      return "active"; // domyślnie aktywny jak robi Dotb
+      return "active"; // domyślnie aktywny
     }
     return {
       id: it.id,
