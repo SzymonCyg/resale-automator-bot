@@ -776,10 +776,22 @@ async function loadAutoLikes() {
   initDualSlider("#alNotifMin", "#alNotifMax", "#alNotifRange", "#alNotifMinLabel", "#alNotifMaxLabel");
   initDualSlider("#alMsgMin", "#alMsgMax", "#alMsgRange", "#alMsgMinLabel", "#alMsgMaxLabel");
   $("#alRunStatus").textContent = s.autoLikesEnabled ? "działa ✓" : "zatrzymane";
-  const stats = stored.autoLikesStats || { sent: 0, lastEvent: "—" };
+  const stats = stored.autoLikesStats || { sent: 0, lastEvent: "—", logs: [] };
   $("#alSentCount").textContent = stats.sent || 0;
   $("#alLastEvent").textContent = stats.lastEvent || "—";
+  const logEl = $("#alLog");
+  if (logEl) {
+    logEl.innerHTML = "";
+    const logs = Array.isArray(stats.logs) ? stats.logs : [];
+    logs.slice(-100).forEach((l) => {
+      const div = document.createElement("div");
+      div.textContent = l;
+      logEl.appendChild(div);
+    });
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 }
+
 
 function readAutoLikesForm() {
   const num = (id, def) => {
