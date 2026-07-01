@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.10";
+  const CONTENT_VERSION = "1.0.11";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -343,8 +343,8 @@
     if (!pub) return { brand: "", size: "", category: "", colors: [] };
     const t = (v) => (v && typeof v === "object" ? (v.title || v.name || "") : (v || ""));
     const brand = pub.brand_title || t(pub.brand_dto) || t(pub.brand) || "";
-    const size = pub.size_title || t(pub.size) || "";
-    const category = pub.catalog_title || t(pub.catalog) || t(pub.category) || "";
+    const size = pub.size || pub.size_title || t(pub.size_dto) || "";
+    const category = pub.catalog_branch_title || pub.catalog_title || t(pub.catalog) || t(pub.category) || "";
     const colors = [
       t(pub.color1) || pub.color1_title || "",
       t(pub.color2) || pub.color2_title || "",
