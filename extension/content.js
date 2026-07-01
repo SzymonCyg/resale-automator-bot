@@ -570,7 +570,7 @@
     autoLikesDiscountUnit: '%',
     autoLikesDelayNotifMin: 60000,
     autoLikesDelayNotifMax: 120000,
-    autoLikesMsgDelayMin: 30000,
+    autoLikesMsgDelayMin: 15000,
     autoLikesMsgDelayMax: 60000,
     autoLikesMinGapMs: 8000,
     autoLikesTimeFilter: 0,
@@ -1010,7 +1010,7 @@
           alLatestId = like.notifId;
           if (like.updatedAt) alLatestDate = new Date(like.updatedAt);
         }
-        const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
+        const msgDelay = Math.max(15000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
         await alSleep(msgDelay);
       } catch (e) {
         if (e instanceof AlRateLimited) {
