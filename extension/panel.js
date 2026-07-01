@@ -833,6 +833,17 @@ $("#alStopBtn").addEventListener("click", async () => {
   $("#alRunStatus").textContent = "zatrzymane";
 });
 
+const alClearBtn = $("#alClearLogBtn");
+if (alClearBtn) {
+  alClearBtn.addEventListener("click", async () => {
+    const cur = (await chrome.storage.local.get(["autoLikesStats"])).autoLikesStats || {};
+    await chrome.storage.local.set({ autoLikesStats: { ...cur, logs: [], logLine: "" } });
+    const el = $("#alLog");
+    if (el) el.innerHTML = "";
+  });
+}
+
+
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.autoLikesStats) {
     const s = changes.autoLikesStats.newValue || {};
