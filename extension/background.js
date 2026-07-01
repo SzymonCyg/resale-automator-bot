@@ -210,27 +210,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.kind === "PARAPHRASE_AI") {
     (async () => {
       try {
-        const apiKey = "__ANTHROPIC_API_KEY__";
-        if (!apiKey || apiKey === "BRAK_KLUCZA" || apiKey.startsWith("__")) {
-          throw new Error("Brak klucza ANTHROPIC_API_KEY");
-        }
+        const apiKey = "AIzaSyD-PLACEHOLDER_GEMINI_KEY";
         const prompt = `Jesteś pomocnikiem sprzedawcy na Vinted. Przepisz tytuł i opis ogłoszenia tak, aby miały to samo znaczenie, ale były wyrażone nieco innymi słowami (drobne zmiany synonimów, kolejność słów, skróty). Tytuł musi być krótki (max 60 znaków). Nie zmieniaj informacji o marce, rozmiarze, stanie ani cenie. Odpowiedz TYLKO w formacie JSON bez żadnego tekstu poza JSON:\n{"title": "...", "description": "..."}\n\nTytuł: ${msg.title}\nOpis: ${msg.description || "(brak opisu)"}`;
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model: "claude-haiku-4-5-20251001",
-            max_tokens: 500,
-            messages: [{ role: "user", content: prompt }],
-          }),
-        });
-        if (!res.ok) throw new Error(`AI API ${res.status}: ${await res.text()}`);
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
+            }),
+          }
+        );
+        if (!res.ok) throw new Error(`Gemini API ${res.status}: ${await res.text()}`);
         const data = await res.json();
-        const text = data.content?.find((b) => b.type === "text")?.text || "";
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
         const clean = text.replace(/```json|```/g, "").trim();
         const parsed = JSON.parse(clean);
         sendResponse({ ok: true, title: parsed.title, description: parsed.description });
