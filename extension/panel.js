@@ -306,20 +306,46 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
     await new Promise((res) => setTimeout(res, 300 + Math.random() * 300));
   }
 
+  const STATUS_ID_TO_LABEL = { 1: "Nowy z metką", 2: "Nowy bez metki", 6: "Bardzo dobry", 3: "Dobry", 4: "Zadowalający" };
+  const valId = (v) => (v && typeof v === "object" ? v.id : v) ?? "";
+  const valTitle = (v) => (v && typeof v === "object" ? v.title : "") ?? "";
+
   const outRows = rows.map(({ _it, _detail, _photos }) => {
+    const d = _detail || {};
+    const attrs = Array.isArray(d.item_attributes) ? d.item_attributes : [];
+    const condAttr = attrs.find(a => a && a.code === "condition");
+    const statusId = d.status_id || valId(d.status) || d.condition_id || valId(d.condition) || (condAttr?.ids?.[0]) || "";
+    const statusLabel = valTitle(d.status) || valTitle(d.condition) || STATUS_ID_TO_LABEL[statusId] || "";
+    const brandId = d.brand_id || valId(d.brand_dto) || valId(d.brand) || "";
+    const brandLabel = d.brand_title || valTitle(d.brand_dto) || valTitle(d.brand) || _it.brand || "";
+    const sizeId = d.size_id || valId(d.size) || "";
+    const sizeLabel = d.size_title || valTitle(d.size) || _it.size_title || "";
+    const catalogId = d.catalog_id || valId(d.catalog) || "";
+    const catalogLabel = d.catalog_title || valTitle(d.catalog) || "";
+    const colorIds = [d.color1_id, d.color2_id].filter(c => c != null);
+    const colorLabels = [valTitle(d.color1) || d.color1_title, valTitle(d.color2) || d.color2_title].filter(Boolean);
+    const packageId = d.package_size_id || valId(d.package_size) || "";
+
     const row = {
       "ID": _it.id,
-      "Tytuł": _it.title || "",
-      "Marka": _it.brand || _detail?.brand?.title || "",
-      "Rozmiar": _it.size_title || _detail?.size_title || "",
-      "Cena": _it.price ?? "",
-      "Waluta": _it.currency || "",
-      "Status": _it.status || "",
-      "Wyświetlenia": _it.view_count ?? _it.views ?? "",
-      "Polubienia": _it.favourite_count ?? "",
-      "Wystawiony": _it.created_at_ts ? new Date(_it.created_at_ts * 1000).toISOString() : (_detail?.created_at || ""),
-      "URL": _it.url || "",
-      "Opis": _detail?.description || _it.description || "",
+      "Tytuł": d.title || _it.title || "",
+      "Opis": d.description || _it.description || "",
+      "Marka": brandLabel,
+      "Marka_ID": brandId,
+      "Rozmiar": sizeLabel,
+      "Rozmiar_ID": sizeId,
+      "Stan": statusLabel,
+      "Stan_ID": statusId,
+      "Kategoria": catalogLabel,
+      "Kategoria_ID": catalogId,
+      "Kolor": colorLabels.join(", "),
+      "Kolor_ID": colorIds.join(","),
+      "Paczka_ID": packageId,
+      "Cena": d.price?.amount ?? _it.price ?? "",
+      "Waluta": d.currency || d.price?.currency_code || _it.currency || "",
+      "Unisex": d.is_unisex === true || d.is_unisex === 1 ? 1 : 0,
+      "Wymiar_dl": d.measurement_length ?? "",
+      "Wymiar_szer": d.measurement_width ?? "",
     };
     for (let i = 0; i < maxPhotos; i++) {
       row[`Zdjęcie_${i + 1}`] = _photos[i] || "";
