@@ -1,4 +1,49 @@
-:root { color-scheme: dark; --bg:#0f1420; --s1:#1a1f2b; --s2:#232a39; --b:#2d3648; --t:#e6edf3; --m:#98a4b3; --p:#5eead4; --d:#f87171; }
+:root {
+  color-scheme: dark;
+  --bg:#0f1420; --s1:#1a1f2b; --s2:#232a39; --b:#2d3648;
+  --t:#e6edf3; --m:#98a4b3; --p:#5eead4; --d:#f87171;
+}
+
+body.theme-light {
+  color-scheme: light;
+  --bg:#f0fafa; --s1:#ffffff; --s2:#e8f7f5; --b:#b2dfd9;
+  --t:#0d2b27; --m:#4a7c76; --p:#0d9488; --d:#dc2626;
+}
+
+/* Korekty jasnego motywu */
+body.theme-light .btn.primary { color:#ffffff; }
+body.theme-light .logo { color:#ffffff; }
+body.theme-light .check-ok { color:#ffffff; }
+body.theme-light .pe-thumb span { color:#0d2b27; text-shadow:none; }
+body.theme-light .al-dual-slider input[type="range"]::-webkit-slider-thumb { border-color:#0d9488; }
+body.theme-light .al-dual-slider input[type="range"]::-moz-range-thumb { border-color:#0d9488; }
+body.theme-light input[type=text],
+body.theme-light input[type=number],
+body.theme-light select,
+body.theme-light textarea { background:var(--s2); border-color:var(--b); color:var(--t); }
+body.theme-light .auth-card { box-shadow:0 10px 40px rgba(0,80,70,.12); }
+
+/* Przełącznik motywu */
+#themeToggle {
+  background: transparent;
+  border: 1px solid var(--b);
+  color: var(--t);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: border-color .15s;
+}
+#themeToggle:hover { border-color: var(--p); }
+
+/* Opcja motywu w ustawieniach */
+.theme-setting { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--b); }
+.theme-setting label { font-size:13px; color:var(--t); flex:1; }
+.theme-btns { display:flex; gap:6px; }
+.theme-btn { background:var(--s2); border:1.5px solid var(--b); color:var(--t); border-radius:8px; padding:6px 14px; cursor:pointer; font:inherit; font-size:13px; transition:border-color .15s; }
+.theme-btn.active { border-color:var(--p); background:color-mix(in srgb, var(--p) 12%, var(--s2)); }
+.theme-btn:hover { border-color:var(--p); }
 * { box-sizing: border-box; }
 body { margin:0; font-family:-apple-system,system-ui,sans-serif; background:var(--bg); color:var(--t); font-size:14px; }
 h1 { font-size:18px; margin:0; }
