@@ -839,45 +839,38 @@
   }
 
   async function alCreateConversationSafe(itemId, userId, csrfToken) {
-    for (let attempt = 0; attempt < 6; attempt++) {
-      try {
-        const r = await alCreateConversation(itemId, userId, csrfToken);
-        if (r && r.message_code === 'rate_limit_exceeded') {
-          const waitMin = 8 + attempt * 2;
-          await alPushStat(`⏳ Rate limit — czekam ${waitMin} min (próba ${attempt+1})...`);
-          await alSleep(alRand(waitMin * 60000, (waitMin + 3) * 60000));
-          continue;
-        }
-        return r;
-      } catch (e) {
-        if (e instanceof AlSkipUser) throw e;
-
-        if (e.captchaUrl) {
-          const solved = await handleCaptchaIfNeeded({ captchaUrl: e.captchaUrl });
-          if (solved) { await alSleep(alRand(1500, 3000)); continue; }
-          throw new AlSkipUser(`weryfikacja nieukończona`);
-        }
-
-        if (alIsRateLimit(e)) {
-          const waitMin = 8 + attempt * 2;
-          await alPushStat(`⏳ Rate limit Vinted — czekam ${waitMin} min (próba ${attempt+1}/6)...`);
-          await alSleep(alRand(waitMin * 60000, (waitMin + 3) * 60000));
-          continue;
-        }
-
-        if (alIsUserBlocked(e)) {
-          throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
-        }
-
-        if (!alDiagShown) {
-          alDiagShown = true;
-          await alPushStat(`🔎 Nieznany błąd: status=${e.status} code=${e.code} msg_code=${e.message_code}`);
-          await alPushStat(`🔎 Body: ${(e.rawText || String(e.message || '')).slice(0,200)}`);
-        }
-        throw e;
+    try {
+      const r = await alCreateConversation(itemId, userId, csrfToken);
+      if (r && r.message_code === 'rate_limit_exceeded') {
+        const mins = alSetCooldown(8, 12);
+        throw new AlRateLimited(`Rate limit — wznowię za ~${mins} min`);
       }
+      return r;
+    } catch (e) {
+      if (e instanceof AlSkipUser || e instanceof AlRateLimited) throw e;
+
+      if (e.captchaUrl) {
+        const solved = await handleCaptchaIfNeeded({ captchaUrl: e.captchaUrl });
+        if (solved) return alCreateConversation(itemId, userId, csrfToken);
+        throw new AlSkipUser(`weryfikacja nieukończona`);
+      }
+
+      if (alIsRateLimit(e)) {
+        const mins = alSetCooldown(8, 12);
+        throw new AlRateLimited(`Rate limit — wznowię za ~${mins} min`);
+      }
+
+      if (alIsUserBlocked(e)) {
+        throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
+      }
+
+      if (!alDiagShown) {
+        alDiagShown = true;
+        await alPushStat(`🔎 Nieznany błąd: status=${e.status} code=${e.code} msg_code=${e.message_code}`);
+        await alPushStat(`🔎 Body: ${(e.rawText || String(e.message || '')).slice(0,200)}`);
+      }
+      throw e;
     }
-    throw new Error('Zbyt wiele prób rate limit — przerywam');
   }
 
   function alCalcDiscount(orig, amount, unit) {
