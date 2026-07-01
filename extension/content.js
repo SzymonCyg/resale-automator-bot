@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.19";
+  const CONTENT_VERSION = "0.9.20";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -687,32 +687,27 @@
       { path: `/web/api/notifications/notifications?page=${page}&per_page=20`, headers: { platform: "web" } },
       { path: `/api/v2/notifications?page=${page}&per_page=20`, headers: {} },
     ];
-    for (let attempt = 0; attempt < 3; attempt++) {
-      let rateLimited = false;
-      for (const t of tries) {
-        try {
-          const res = await vintedRaw(t.path, { headers: t.headers });
-          if (res?.ok && res?.json) {
-            const r = res.json;
-            if (r.message_code === 'rate_limit_exceeded' || r.code === 106) {
-              await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
-              rateLimited = true;
-              break;
-            }
-            const arr = r?.notifications ?? r?.data;
-            if (Array.isArray(arr)) return { notifications: arr, pagination: r?.pagination || r?.meta || {} };
+    for (const t of tries) {
+      try {
+        const res = await vintedRaw(t.path, { headers: t.headers });
+        if (res?.ok && res?.json) {
+          const r = res.json;
+          if (r.message_code === 'rate_limit_exceeded' || r.code === 106) {
+            const mins = alSetCooldown(8, 12);
+            await alPushStat(`⏳ Rate limit — wznowię za ~${mins} min`);
+            return { notifications: [], pagination: {} };
           }
-        } catch (e) {
-          const msg = String(e?.message || e);
-          if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
-            await alPushStat(`⚠ Rate limit (${attempt+1}/3) — czekam 90s...`);
-            rateLimited = true;
-            break;
-          }
+          const arr = r?.notifications ?? r?.data;
+          if (Array.isArray(arr)) return { notifications: arr, pagination: r?.pagination || r?.meta || {} };
+        }
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
+          const mins = alSetCooldown(8, 12);
+          await alPushStat(`⏳ Rate limit — wznowię za ~${mins} min`);
+          return { notifications: [], pagination: {} };
         }
       }
-      if (rateLimited) { await alSleep(alRand(90000, 120000)); continue; }
-      break;
     }
     return { notifications: [], pagination: {} };
   }
@@ -735,6 +730,7 @@
     let totalLikes = 0;
 
     while (!stop) {
+      if (alInCooldown()) break;
       const { notifications, pagination } = await alFetchNotificationsPage(page);
       if (!notifications.length) break;
       totalNotifs += notifications.length;
@@ -805,6 +801,23 @@
   }
 
   class AlSkipUser extends Error {}
+  class AlRateLimited extends Error {}
+
+  let alGlobalCooldownUntil = 0;
+
+  function alInCooldown() {
+    return Date.now() < alGlobalCooldownUntil;
+  }
+
+  function alCooldownMinutesLeft() {
+    return Math.max(0, Math.ceil((alGlobalCooldownUntil - Date.now()) / 60000));
+  }
+
+  function alSetCooldown(minMinutes, maxMinutes) {
+    const ms = alRand(minMinutes * 60000, maxMinutes * 60000);
+    alGlobalCooldownUntil = Date.now() + ms;
+    return Math.round(ms / 60000);
+  }
 
   function alIsRateLimit(e) {
     const msg = String(e?.message || e);
@@ -822,45 +835,38 @@
   }
 
   async function alCreateConversationSafe(itemId, userId, csrfToken) {
-    for (let attempt = 0; attempt < 6; attempt++) {
-      try {
-        const r = await alCreateConversation(itemId, userId, csrfToken);
-        if (r && r.message_code === 'rate_limit_exceeded') {
-          const waitMin = 8 + attempt * 2;
-          await alPushStat(`⏳ Rate limit — czekam ${waitMin} min (próba ${attempt+1})...`);
-          await alSleep(alRand(waitMin * 60000, (waitMin + 3) * 60000));
-          continue;
-        }
-        return r;
-      } catch (e) {
-        if (e instanceof AlSkipUser) throw e;
-
-        if (e.captchaUrl) {
-          const solved = await handleCaptchaIfNeeded({ captchaUrl: e.captchaUrl });
-          if (solved) { await alSleep(alRand(1500, 3000)); continue; }
-          throw new AlSkipUser(`weryfikacja nieukończona`);
-        }
-
-        if (alIsRateLimit(e)) {
-          const waitMin = 8 + attempt * 2;
-          await alPushStat(`⏳ Rate limit Vinted — czekam ${waitMin} min (próba ${attempt+1}/6)...`);
-          await alSleep(alRand(waitMin * 60000, (waitMin + 3) * 60000));
-          continue;
-        }
-
-        if (alIsUserBlocked(e)) {
-          throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
-        }
-
-        if (!alDiagShown) {
-          alDiagShown = true;
-          await alPushStat(`🔎 Nieznany błąd: status=${e.status} code=${e.code} msg_code=${e.message_code}`);
-          await alPushStat(`🔎 Body: ${(e.rawText || String(e.message || '')).slice(0,200)}`);
-        }
-        throw e;
+    try {
+      const r = await alCreateConversation(itemId, userId, csrfToken);
+      if (r && r.message_code === 'rate_limit_exceeded') {
+        const mins = alSetCooldown(8, 12);
+        throw new AlRateLimited(`Rate limit — wznowię za ~${mins} min`);
       }
+      return r;
+    } catch (e) {
+      if (e instanceof AlSkipUser || e instanceof AlRateLimited) throw e;
+
+      if (e.captchaUrl) {
+        const solved = await handleCaptchaIfNeeded({ captchaUrl: e.captchaUrl });
+        if (solved) return alCreateConversation(itemId, userId, csrfToken);
+        throw new AlSkipUser(`weryfikacja nieukończona`);
+      }
+
+      if (alIsRateLimit(e)) {
+        const mins = alSetCooldown(8, 12);
+        throw new AlRateLimited(`Rate limit — wznowię za ~${mins} min`);
+      }
+
+      if (alIsUserBlocked(e)) {
+        throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
+      }
+
+      if (!alDiagShown) {
+        alDiagShown = true;
+        await alPushStat(`🔎 Nieznany błąd: status=${e.status} code=${e.code} msg_code=${e.message_code}`);
+        await alPushStat(`🔎 Body: ${(e.rawText || String(e.message || '')).slice(0,200)}`);
+      }
+      throw e;
     }
-    throw new Error('Zbyt wiele prób rate limit — przerywam');
   }
 
   function alCalcDiscount(orig, amount, unit) {
@@ -882,37 +888,30 @@
 
   async function alSendReply(conversationId, body, csrfToken) {
     const replyReferrer = new URL(`/inbox/${conversationId}`, window.location.origin).toString();
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const r = await vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
-          method: "POST",
-          csrfToken,
-          referrer: replyReferrer,
-          body: JSON.stringify({ reply: { body, is_personal_data_sharing_check_skipped: false, photo_temp_uuids: null } }),
-        });
-        if (r && (r.message_code === 'rate_limit_exceeded' || (r.code === 106 && r.message_code !== 'access_denied'))) {
-          await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
-          await alSleep(alRand(90000, 120000));
-          continue;
-        }
-        if (r && r.message_code === 'access_denied') {
-          throw new Error(`access_denied: brak dostępu do konwersacji`);
-        }
-        return r;
-      } catch (e) {
-        const msg = String(e?.message || e);
-        if (msg.includes('access_denied') || (msg.includes('403') && !msg.includes('429'))) {
-          throw e;
-        }
-        if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
-          await alPushStat(`⚠ Rate limit wiadomości (${attempt+1}/3) — czekam 90s...`);
-          await alSleep(alRand(90000, 120000));
-          continue;
-        }
-        throw e;
+    let r;
+    try {
+      r = await vintedApi(`/api/v2/conversations/${conversationId}/replies`, {
+        method: "POST",
+        csrfToken,
+        referrer: replyReferrer,
+        body: JSON.stringify({ reply: { body, is_personal_data_sharing_check_skipped: false, photo_temp_uuids: null } }),
+      });
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
+        const mins = alSetCooldown(8, 12);
+        throw new AlRateLimited(`Rate limit — wznowię za ~${mins} min`);
       }
+      throw e;
     }
-    throw new Error('Przekroczono liczbę prób');
+    if (r && r.message_code === 'rate_limit_exceeded') {
+      const mins = alSetCooldown(8, 12);
+      throw new AlRateLimited(`Rate limit — wznowię za ~${mins} min`);
+    }
+    if (r && r.message_code === 'access_denied') {
+      throw new Error(`access_denied: brak dostępu do konwersacji`);
+    }
+    return r;
   }
 
   let alRunning = false;
@@ -921,7 +920,11 @@
   async function alLoopOnce() {
     const s = await alGetSettings();
     if (!s.autoLikesEnabled) return false;
-    const csrfToken = readCsrfToken();
+
+    if (alInCooldown()) {
+      await alPushStat(`⏳ Rate limit — wznowię za ~${alCooldownMinutesLeft()} min`);
+      return true;
+    }
 
     let likes = [];
     try { likes = await alGetNotifications(s); }
@@ -933,6 +936,11 @@
     for (const like of likes) {
       const cur = await alGetSettings();
       if (!cur.autoLikesEnabled) return false;
+      if (alInCooldown()) {
+        await alPushStat(`⏳ Rate limit — wznowię za ~${alCooldownMinutesLeft()} min`);
+        break;
+      }
+      const csrfToken = readCsrfToken();
       try {
         const convRes = await alCreateConversationSafe(like.itemId, like.userId, csrfToken);
         const conv = convRes?.conversation || convRes?.thread || convRes;
@@ -977,6 +985,10 @@
         const msgDelay = Math.max(30000, alRand(cur.autoLikesMsgDelayMin, cur.autoLikesMsgDelayMax));
         await alSleep(msgDelay);
       } catch (e) {
+        if (e instanceof AlRateLimited) {
+          await alPushStat(`⏳ ${e.message}`);
+          break;
+        }
         if (!(e instanceof AlSkipUser)) {
           const errMsg = e.message || String(e);
           await alPushStat(`✗ Przerwano dla @${like.login || like.userId}: ${errMsg}`);
@@ -987,7 +999,7 @@
       }
     }
 
-    if (alMode === 'backlog') {
+    if (alMode === 'backlog' && !alInCooldown()) {
       alMode = 'live';
       await alPushStat(`✅ Historia przetworzona — tryb live`);
     }
