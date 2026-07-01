@@ -679,12 +679,26 @@ async function exportPhoto(p, mode) {
   return await c.convertToBlob({ type: "image/jpeg", quality: 0.92 });
 }
 
-async function paraphraseWithAI(title, description) {
-  const r = await new Promise((resolve) =>
-    chrome.runtime.sendMessage({ kind: "PARAPHRASE_AI", title, description }, resolve),
-  );
-  if (!r?.ok) throw new Error(r?.error || "AI niedostępne");
-  return { title: r.title, description: r.description };
+async function paraphraseWithAI(title, description, language) {
+  const { session, supabaseUrl, supabaseAnonKey } = await chrome.storage.local.get([
+    "session", "supabaseUrl", "supabaseAnonKey",
+  ]);
+  const base = supabaseUrl || "https://vdkxhhgoloiylkscessp.supabase.co";
+  const token = session?.access_token || "";
+  const anon = supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZka3hoaGdvbG9peWxrc2Nlc3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NjYxMjUsImV4cCI6MjA5ODI0MjEyNX0.ZQzRkY2Utf405okkc0b-JJK2zXW40C0EM9XxlzWUOek";
+  const res = await fetch(`${base}/functions/v1/paraphrase-text`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token || anon}`,
+      "apikey": anon,
+    },
+    body: JSON.stringify({ title, description: description || "", language: language || "pl" }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return { title: data.title || title, description: data.description || description };
 }
 
 $("#runRelist").addEventListener("click", async () => {
