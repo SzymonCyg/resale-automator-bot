@@ -485,6 +485,83 @@
     return { newId, deletedOld, deleteError };
   }
 
+  async function createListing({ attributes = {}, photos = [], mode = "draft" }) {
+    await ensureExtensionSignedIn();
+    const csrfToken = readCsrfToken();
+    if (!Array.isArray(photos) || !photos.length) throw new Error("Brak zdjęć do wgrania");
+
+    const colorIds = Array.isArray(attributes.color_ids) ? attributes.color_ids.filter(c => c != null) : [];
+    const original = {
+      title: attributes.title || "",
+      description: attributes.description || attributes.title || "",
+      brand_id: attributes.brand_id || null,
+      brand_title: attributes.brand || null,
+      size_id: attributes.size_id || null,
+      catalog_id: attributes.catalog_id || null,
+      status_id: attributes.status_id || null,
+      package_size_id: attributes.package_size_id || null,
+      color1_id: colorIds[0] ?? null,
+      color2_id: colorIds[1] ?? null,
+      is_unisex: attributes.is_unisex === true || attributes.is_unisex === 1,
+      measurement_length: attributes.measurement_length ?? null,
+      measurement_width: attributes.measurement_width ?? null,
+      item_attributes: [],
+    };
+    const price = Number(attributes.price);
+    if (!(price > 0)) throw new Error("Brak poprawnej ceny");
+    const currency = attributes.currency || "PLN";
+
+    const photoIds = [];
+    for (const p of photos) {
+      const id = await uploadPhotoDataUrl(p, csrfToken);
+      if (id) photoIds.push(id);
+    }
+    if (!photoIds.length) throw new Error("Nie udało się wgrać żadnego zdjęcia");
+
+    const draft = buildDraft({ original, price, currency, photoIds });
+    const draftRes = await vintedApi(`/api/v2/item_upload/drafts`, {
+      method: "POST",
+      csrfToken,
+      body: JSON.stringify({ draft, feedback_id: null, parcel: null, upload_session_id: draft.temp_uuid }),
+    });
+    const createdDraft = draftRes?.draft || draftRes;
+    const draftId = createdDraft?.id;
+    if (!draftId) throw new Error("Vinted nie zwrócił ID draftu");
+
+    if (mode !== "publish") {
+      return { id: draftId, mode: "draft" };
+    }
+
+    await new Promise(r => setTimeout(r, 2500));
+    let refreshedDraft = createdDraft;
+    try {
+      const rr = await vintedRaw(`/api/v2/item_upload/items/${draftId}`, {});
+      if (rr?.ok && rr?.json) refreshedDraft = rr.json.item || rr.json;
+    } catch {}
+
+    const draftPhotos = Array.isArray(refreshedDraft?.photos) && refreshedDraft.photos.length
+      ? refreshedDraft.photos.map(p => ({ id: p.id, orientation: p.orientation ?? 0 }))
+      : photoIds.map(id => ({ id, orientation: 0 }));
+
+    const publishDraft = buildDraft({
+      original: { ...original, ...refreshedDraft },
+      price,
+      currency,
+      photoIds,
+      tempUuid: refreshedDraft?.temp_uuid || newUuid(),
+      assignedPhotos: draftPhotos,
+    });
+    publishDraft.id = draftId;
+
+    const completedRes = await vintedApi(`/api/v2/item_upload/drafts/${draftId}/completion`, {
+      method: "POST",
+      csrfToken,
+      body: JSON.stringify({ draft: publishDraft, feedback_id: null, parcel: null, push_up: false, upload_session_id: publishDraft.temp_uuid }),
+    });
+    const newId = completedRes?.item?.id ?? completedRes?.id ?? draftId;
+    return { id: newId, mode: "publish" };
+  }
+
   function matchRule(text, rule) {
     if (!text || !rule?.pattern) return false;
     const t = text.toLowerCase(), p = rule.pattern.toLowerCase();
