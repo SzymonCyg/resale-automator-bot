@@ -834,6 +834,13 @@
       || (msg.includes('403') && msg.includes('access_denied'));
   }
 
+  function alIsTransientFetch(e) {
+    const msg = String(e?.message || e);
+    return (e?.status === undefined || e?.status === null)
+      && (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Timeout') || msg.includes('fetch failed'));
+  }
+
+
   async function alCreateConversationSafe(itemId, userId, csrfToken) {
     try {
       const r = await alCreateConversation(itemId, userId, csrfToken);
@@ -858,6 +865,10 @@
 
       if (alIsUserBlocked(e)) {
         throw new AlSkipUser(`użytkownik zablokował lub ogłoszenie nieaktywne`);
+      }
+
+      if (alIsTransientFetch(e)) {
+        throw new AlrightSkipUser(`chwilowy problem połączenia — pomijam`);
       }
 
       if (!alDiagShown) {
