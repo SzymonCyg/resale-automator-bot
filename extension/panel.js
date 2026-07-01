@@ -814,8 +814,6 @@ $("#alSaveBtn").addEventListener("click", async () => {
 $("#alStartBtn").addEventListener("click", async () => {
   await saveAutoLikes({ autoLikesEnabled: true });
   $("#alRunStatus").textContent = "działa ✓";
-  const tab = await getVintedTab();
-  if (tab) await vintedMsg(tab.id, { kind: "AUTOLIKES_KICK" }).catch(() => {});
 });
 
 $("#alStopBtn").addEventListener("click", async () => {

@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.16";
+  const CONTENT_VERSION = "0.9.17";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -990,25 +990,28 @@
 
   async function alStartLoop() {
     if (alRunning) return;
-    const acquired = await alTryAcquireLock();
-    if (!acquired) return;
     alRunning = true;
-    alStartHeartbeat();
-    const s0 = await alGetSettings();
-    alMode = (s0.autoLikesTimeFilter || 0) > 0 ? 'backlog' : 'live';
-    await alPushStat(`🔍 Tryb: ${alMode === 'backlog' ? `historyczne (${s0.autoLikesTimeFilter}s wstecz)` : 'tylko nowe'}`);
-    while (true) {
-      const s = await alGetSettings();
-      if (!s.autoLikesEnabled) break;
-      try { await alLoopOnce(); } catch (e) { console.warn("[AL]", e); }
-      const wait = alRand(s.autoLikesDelayNotifMin, s.autoLikesDelayNotifMax);
-      await new Promise(r => { alKick = r; setTimeout(r, wait); });
-      alKick = null;
+    try {
+      const acquired = await alTryAcquireLock();
+      if (!acquired) return;
+      alStartHeartbeat();
+      const s0 = await alGetSettings();
+      alMode = (s0.autoLikesTimeFilter || 0) > 0 ? 'backlog' : 'live';
+      await alPushStat(`🔍 Tryb: ${alMode === 'backlog' ? `historyczne (${s0.autoLikesTimeFilter}s wstecz)` : 'tylko nowe'}`);
+      while (true) {
+        const s = await alGetSettings();
+        if (!s.autoLikesEnabled) break;
+        try { await alLoopOnce(); } catch (e) { console.warn("[AL]", e); }
+        const wait = alRand(s.autoLikesDelayNotifMin, s.autoLikesDelayNotifMax);
+        await new Promise(r => { alKick = r; setTimeout(r, wait); });
+        alKick = null;
+      }
+    } finally {
+      alRunning = false;
+      alMode = 'idle';
+      alStopHeartbeat();
+      await alReleaseLockIfMine();
     }
-    alRunning = false;
-    alMode = 'idle';
-    alStopHeartbeat();
-    await alReleaseLockIfMine();
   }
 
   chrome.storage.onChanged.addListener((changes) => {
