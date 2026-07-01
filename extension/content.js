@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "0.9.11";
+  const CONTENT_VERSION = "0.9.12";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -26,8 +26,26 @@
     return document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith(name + "="))?.split("=")[1];
   }
 
+  function extractCsrfFromScripts() {
+    const scripts = document.querySelectorAll("script");
+    const patterns = [
+      /"CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/,
+      /\\"CSRF_TOKEN\\":\\"([^"\\]+)/,
+      /"csrfToken\\?"\s*:\s*\\?"([^"\\]+)/,
+    ];
+    for (const s of scripts) {
+      const txt = s.textContent || "";
+      if (!txt.includes("CSRF") && !txt.includes("csrf")) continue;
+      for (const re of patterns) {
+        const m = txt.match(re);
+        if (m && m[1]) return m[1];
+      }
+    }
+    return "";
+  }
+
   function readCsrfTokenFromText(text) {
-    return String(text || "").match(/CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
+    return String(text || "").match(/"CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
       || String(text || "").match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/i)?.[1]
       || String(text || "").match(/<meta\s+content="([^"]+)"\s+name="csrf-token"/i)?.[1]
       || String(text || "").match(/"csrfToken"\s*:\s*"([^"]+)"/i)?.[1]
@@ -36,7 +54,9 @@
   }
 
   function readCsrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content || readCsrfTokenFromText(document.documentElement.innerHTML);
+    return extractCsrfFromScripts()
+      || document.querySelector('meta[name="csrf-token"]')?.content
+      || readCsrfTokenFromText(document.documentElement.innerHTML);
   }
 
   function newUuid() {
@@ -680,8 +700,8 @@
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const r = await alCreateConversation(itemId, userId, csrfToken);
-        if (r && r.code === 106) throw new AlSkipUser('blocked_or_inactive');
-        if (r && r.message_code === 'access_denied') throw new AlSkipUser('blocked_or_inactive');
+        if (r && r.code === 106) throw new AlSkipUser(`zablokowany/nieaktywny (kod 106)`);
+        if (r && r.message_code === 'access_denied') throw new AlSkipUser(`brak dostępu (${r.message || 'access_denied'})`);
         if (r && r.message_code === 'rate_limit_exceeded') {
           await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
           await alSleep(alRand(90000, 120000));
@@ -692,7 +712,7 @@
         if (e instanceof AlSkipUser) throw e;
         const msg = String(e?.message || e);
         if (msg.includes('access_denied') || (msg.includes('403') && msg.includes('106'))) {
-          throw new AlSkipUser('blocked_or_inactive');
+          throw new AlSkipUser(`brak dostępu (${msg.slice(0,120)})`);
         }
         if (msg.includes('429') || msg.includes('rate_limit_exceeded')) {
           await alPushStat(`⚠ Rate limit konwersacji (${attempt+1}/3) — czekam 90s...`);
@@ -821,7 +841,7 @@
         await alSleep(msgDelay);
       } catch (e) {
         if (e instanceof AlSkipUser) {
-          await alPushStat(`⊘ pominięto @${like.login || like.userId} — użytkownik zablokował lub ogłoszenie nieaktywne`);
+          await alPushStat(`⊘ pominięto @${like.login || like.userId} — ${e.message || 'brak dostępu'}`);
         } else {
           const errMsg = e.message || String(e);
           await alPushStat(`✗ ${like.login || like.userId}: ${errMsg}`);

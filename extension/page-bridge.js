@@ -1,5 +1,5 @@
 (function () {
-  const BRIDGE_VERSION = "0.9.11";
+  const BRIDGE_VERSION = "0.9.12";
   if (window.__VM_PAGE_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
   window.__VM_PAGE_BRIDGE__ = true;
   window.__VM_PAGE_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -12,10 +12,29 @@
       ?.split("=")[1];
   }
 
+  function extractCsrfFromScripts() {
+    const scripts = document.querySelectorAll("script");
+    const patterns = [
+      /"CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/,
+      /\\"CSRF_TOKEN\\":\\"([^"\\]+)/,
+      /"csrfToken\\?"\s*:\s*\\?"([^"\\]+)/,
+    ];
+    for (const s of scripts) {
+      const txt = s.textContent || "";
+      if (!txt.includes("CSRF") && !txt.includes("csrf")) continue;
+      for (const re of patterns) {
+        const m = txt.match(re);
+        if (m && m[1]) return m[1];
+      }
+    }
+    return "";
+  }
+
   function readCsrfToken() {
     return window.__VM_CSRF_TOKEN__
+      || extractCsrfFromScripts()
       || document.querySelector('meta[name="csrf-token"]')?.content
-      || document.documentElement.innerHTML.match(/CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
+      || document.documentElement.innerHTML.match(/"CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
       || document.documentElement.innerHTML.match(/"csrfToken"\s*:\s*"([^"]+)"/i)?.[1]
       || document.documentElement.innerHTML.match(/"csrf_token"\s*:\s*"([^"]+)"/i)?.[1]
       || "";
@@ -117,15 +136,38 @@
         if (urlOrigin !== window.location.origin) fetchMode = "cors";
       } catch {}
 
-      const response = await fetch(url, {
-        ...init,
-        headers,
-        credentials: "include",
-        mode: fetchMode,
-        cache: init.cache || "no-store",
-        referrer: init.referrer,
-        referrerPolicy: init.referrer ? "unsafe-url" : undefined,
-      });
+      const doFetch = (extraHeaders) => {
+        const h = new Headers(headers);
+        if (extraHeaders) for (const [k, v] of Object.entries(extraHeaders)) h.set(k, v);
+        return fetch(url, {
+          ...init,
+          headers: h,
+          credentials: "include",
+          mode: fetchMode,
+          cache: init.cache || "no-store",
+          referrer: init.referrer,
+          referrerPolicy: init.referrer ? "unsafe-url" : undefined,
+        });
+      };
+
+      let response = await doFetch();
+
+      if ((response.status === 401 || response.status === 403) && (init.method && init.method !== "GET")) {
+        try {
+          delete window.__VM_CSRF_TOKEN__;
+          window.csrfTokenCache = null;
+          await fetch(new URL("/web/api/auth/refresh", window.location.origin).toString(), {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+          }).catch(() => {});
+          const freshCsrf = extractCsrfFromScripts() || readCsrfToken();
+          if (freshCsrf) {
+            window.__VM_CSRF_TOKEN__ = freshCsrf;
+            response = await doFetch({ "X-CSRF-Token": freshCsrf });
+          }
+        } catch {}
+      }
 
       window.postMessage(
         { source: "VM_PAGE_BRIDGE_058", id: msg.id, ok: true, response: await toPayload(response) },
