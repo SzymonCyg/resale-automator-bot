@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.11";
+  const CONTENT_VERSION = "1.0.12";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
