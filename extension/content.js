@@ -868,7 +868,7 @@
       }
 
       if (alIsTransientFetch(e)) {
-        throw new AlrightSkipUser(`chwilowy problem połączenia — pomijam`);
+        throw new AlSkipUser(`chwilowy problem połączenia — pomijam`);
       }
 
       if (!alDiagShown) {
