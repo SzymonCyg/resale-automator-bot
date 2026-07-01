@@ -556,6 +556,23 @@
           alStartLoop();
           sendResponse({ ok: true });
         }
+        else if (msg.kind === 'GET_VINTED_THEME') {
+          const body = document.body;
+          let theme = null;
+          if (body.classList.contains('dark-theme') || body.classList.contains('theme--dark') || body.getAttribute('data-theme') === 'dark') {
+            theme = 'dark';
+          } else if (body.classList.contains('light-theme') || body.classList.contains('theme--light') || body.getAttribute('data-theme') === 'light') {
+            theme = 'light';
+          } else {
+            const bg = window.getComputedStyle(body).backgroundColor;
+            const m = bg.match(/\d+/g);
+            if (m) {
+              const brightness = (parseInt(m[0]) * 299 + parseInt(m[1]) * 587 + parseInt(m[2]) * 114) / 1000;
+              theme = brightness < 128 ? 'dark' : 'light';
+            }
+          }
+          sendResponse({ theme });
+        }
 
       } catch (e) {
         sendResponse({ ok: false, error: e.message });
