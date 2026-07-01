@@ -335,6 +335,8 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
   status.textContent = `✓ Wyeksportowano ${outRows.length} przedmiotów (${totalPhotos} zdjęć)`;
   btn.disabled = false;
 });
+$("#selAll").addEventListener("change", (e) => {
+  const checked = e.target.checked;
   getFilteredItems().forEach((it) => (checked ? selected.add(String(it.id)) : selected.delete(String(it.id))));
   renderItems();
   updateSel();
