@@ -26,8 +26,26 @@
     return document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith(name + "="))?.split("=")[1];
   }
 
+  function extractCsrfFromScripts() {
+    const scripts = document.querySelectorAll("script");
+    const patterns = [
+      /"CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/,
+      /\\"CSRF_TOKEN\\":\\"([^"\\]+)/,
+      /"csrfToken\\?"\s*:\s*\\?"([^"\\]+)/,
+    ];
+    for (const s of scripts) {
+      const txt = s.textContent || "";
+      if (!txt.includes("CSRF") && !txt.includes("csrf")) continue;
+      for (const re of patterns) {
+        const m = txt.match(re);
+        if (m && m[1]) return m[1];
+      }
+    }
+    return "";
+  }
+
   function readCsrfTokenFromText(text) {
-    return String(text || "").match(/CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
+    return String(text || "").match(/"CSRF_TOKEN\\?"\s*:\s*\\?"([^"\\]+)/i)?.[1]
       || String(text || "").match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/i)?.[1]
       || String(text || "").match(/<meta\s+content="([^"]+)"\s+name="csrf-token"/i)?.[1]
       || String(text || "").match(/"csrfToken"\s*:\s*"([^"]+)"/i)?.[1]
@@ -36,7 +54,9 @@
   }
 
   function readCsrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content || readCsrfTokenFromText(document.documentElement.innerHTML);
+    return extractCsrfFromScripts()
+      || document.querySelector('meta[name="csrf-token"]')?.content
+      || readCsrfTokenFromText(document.documentElement.innerHTML);
   }
 
   function newUuid() {
@@ -821,7 +841,7 @@
         await alSleep(msgDelay);
       } catch (e) {
         if (e instanceof AlSkipUser) {
-          await alPushStat(`⊘ pominięto @${like.login || like.userId} — użytkownik zablokował lub ogłoszenie nieaktywne`);
+          await alPushStat(`⊘ pominięto @${like.login || like.userId} — ${e.message || 'brak dostępu'}`);
         } else {
           const errMsg = e.message || String(e);
           await alPushStat(`✗ ${like.login || like.userId}: ${errMsg}`);
