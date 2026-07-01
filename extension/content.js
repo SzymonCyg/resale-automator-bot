@@ -805,6 +805,23 @@
   }
 
   class AlSkipUser extends Error {}
+  class AlRateLimited extends Error {}
+
+  let alGlobalCooldownUntil = 0;
+
+  function alInCooldown() {
+    return Date.now() < alGlobalCooldownUntil;
+  }
+
+  function alCooldownMinutesLeft() {
+    return Math.max(0, Math.ceil((alGlobalCooldownUntil - Date.now()) / 60000));
+  }
+
+  function alSetCooldown(minMinutes, maxMinutes) {
+    const ms = alRand(minMinutes * 60000, maxMinutes * 60000);
+    alGlobalCooldownUntil = Date.now() + ms;
+    return Math.round(ms / 60000);
+  }
 
   function alIsRateLimit(e) {
     const msg = String(e?.message || e);
