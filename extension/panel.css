@@ -193,3 +193,8 @@ code { background:var(--s2); padding:1px 6px; border-radius:4px; font-size:12px;
 .slider-range { position:absolute; top:10px; height:4px; background:var(--p); border-radius:4px; z-index:1; pointer-events:none; }
 .al-slider-limits { display:flex; justify-content:space-between; font-size:11px; color:var(--m); margin-top:6px; }
 .al-time-filter select { width:100%; }
+
+.pill--active { background: color-mix(in srgb, #5eead4 20%, var(--s2)); color: #0d9488; }
+.pill--draft  { background: color-mix(in srgb, #f59e0b 20%, var(--s2)); color: #b45309; }
+.pill--sold   { background: color-mix(in srgb, #94a3b8 20%, var(--s2)); color: #64748b; }
+.pill--inactive { background: color-mix(in srgb, #f87171 20%, var(--s2)); color: #dc2626; }
