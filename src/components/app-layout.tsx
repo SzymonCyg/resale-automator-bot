@@ -112,11 +112,27 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
         );
       })}
 
-      <div className="mt-auto">
+      <div className="mt-auto space-y-1">
+        <ThemeToggle />
         <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start" size="sm">
           <LogOut className="mr-2 h-4 w-4" /> Wyloguj
         </Button>
       </div>
     </nav>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <button
+      onClick={toggle}
+      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent/50"
+      aria-label="Przełącz motyw"
+    >
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      <span>{isDark ? "Jasny motyw" : "Ciemny motyw"}</span>
+    </button>
   );
 }
