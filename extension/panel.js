@@ -221,9 +221,46 @@ $("#syncItems").addEventListener("click", async () => {
 });
 $("#selAll").addEventListener("change", (e) => {
   const checked = e.target.checked;
-  items.forEach((it) => (checked ? selected.add(String(it.id)) : selected.delete(String(it.id))));
+  getFilteredItems().forEach((it) => (checked ? selected.add(String(it.id)) : selected.delete(String(it.id))));
   renderItems();
   updateSel();
+});
+$("#filterStatus").addEventListener("change", (e) => {
+  filterStatus = e.target.value;
+  renderItems();
+});
+$("#deleteBtn").addEventListener("click", async () => {
+  if (!selected.size) return;
+  const count = selected.size;
+  if (!confirm(`Czy na pewno chcesz usunąć ${count} przedmiot(ów)? Tej akcji nie można cofnąć.`)) return;
+  const tab = await getVintedTab();
+  if (!tab) { $("#itemsStatus").textContent = "Otwórz zalogowaną kartę vinted.*"; return; }
+  const btn = $("#deleteBtn");
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = "Usuwam...";
+  let deleted = 0, errors = 0;
+  for (const id of [...selected]) {
+    try {
+      const r = await vintedMsg(tab.id, { kind: "DELETE_ITEM_V2", id });
+      if (r?.ok) {
+        deleted++;
+        items = items.filter((it) => String(it.id) !== String(id));
+        selected.delete(id);
+      } else {
+        errors++;
+        console.warn("Delete failed:", id, r?.error);
+      }
+    } catch (e) {
+      errors++;
+      console.warn("Delete error:", id, e.message);
+    }
+    await new Promise((r) => setTimeout(r, 800));
+  }
+  renderItems();
+  updateSel();
+  btn.textContent = orig;
+  $("#itemsStatus").textContent = `Usunięto ${deleted} przedmiotów${errors ? `, błędy: ${errors}` : ""}`;
 });
 
 // ---------- RELIST ----------
