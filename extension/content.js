@@ -704,7 +704,17 @@
           sendResponse({ ok: true, username: me?.login, userId: me?.id, photo: me?.photo?.url });
         }
         else if (msg.kind === "FETCH_ITEM_DETAIL" || msg.kind === "FETCH_ITEM_DETAIL_V2") sendResponse({ ok: true, item: await fetchItemDetail(msg.id) });
-        else if (msg.kind === "FETCH_ITEM_LABELS_V2") sendResponse({ ok: true, labels: extractLabels(await fetchPublicItem(msg.id)) });
+        else if (msg.kind === "FETCH_ITEM_LABELS_V2") {
+          const pub = await fetchPublicItem(msg.id);
+          const labels = extractLabels(pub);
+          const diag = pub ? {
+            keys: Object.keys(pub).slice(0, 60),
+            size: pub.size, size_title: pub.size_title,
+            catalog_branch_title: pub.catalog_branch_title, catalog_title: pub.catalog_title, catalog_id: pub.catalog_id,
+            brand: pub.brand
+          } : { pubNull: true };
+          sendResponse({ ok: true, labels, diag });
+        }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
         else if (msg.kind === "PUBLISH_DRAFT_V2") sendResponse({ ok: true, ...(await publishExistingDraft(msg.id)) });
