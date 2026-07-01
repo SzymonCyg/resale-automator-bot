@@ -212,6 +212,16 @@
         <button id="saveSettings" class="btn primary">Zapisz ustawienia</button>
         <span id="saveStatus" class="muted"></span>
       </section>
+
+      <!-- IMPORT -->
+      <section class="view hidden" data-view="import">
+        <div class="toolbar" style="gap:8px;flex-wrap:wrap">
+          <input type="file" id="importFile" accept=".xlsx,.xls,.csv" />
+          <button id="importParseBtn" class="btn primary">Wczytaj podgląd</button>
+          <span id="importStatus" class="muted"></span>
+        </div>
+        <div id="importPreview" style="margin-top:12px"></div>
+      </section>
     </div>
 
     <!-- RELIST MODAL -->
