@@ -117,6 +117,8 @@ textarea { min-height:60px; width:100%; resize:vertical; }
 .r-collapsed { background:var(--s2); border:1px solid var(--b); border-radius:6px; padding:8px 10px; cursor:text; color:var(--t); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:400; }
 .r-collapsed.desc { color:var(--m); font-size:12px; }
 .r-collapsed:hover { border-color:var(--p); }
+.text-locked .r-collapsed { opacity:.55; cursor:not-allowed; }
+.text-locked .r-collapsed:hover { border-color:var(--b); }
 .r-expanded { display:flex; flex-direction:column; gap:6px; }
 .r-expanded input, .r-expanded textarea { width:100%; font-size:13px; font-family:inherit; }
 .r-expanded textarea { min-height:120px; }
