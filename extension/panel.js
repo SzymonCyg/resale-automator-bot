@@ -1719,6 +1719,19 @@ function aiRenderCard(item) {
 
   let previewHtml = "";
   if (gen) {
+    const statusCurrent = res?.status_label || gen.condition || "";
+    const statusOpts = AI_STATUS_OPTIONS.map(s =>
+      `<option value="${aiEscape(s)}"${aiNorm(s)===aiNorm(statusCurrent)?" selected":""}>${aiEscape(s)}</option>`
+    ).join("");
+    const catValue = res?.catalog_id
+      ? (aiCatalogLeaves.find(l => l.id === Number(res.catalog_id))?.path || res.catalog_title || "")
+      : "";
+    const sizeList = (res?.catalog_id && aiSizesCache[res.catalog_id]) || [];
+    const sizeOpts = sizeList.length
+      ? `<option value="">— wybierz —</option>` + sizeList.map(s =>
+          `<option value="${s.id}"${Number(res?.size_id)===Number(s.id)?" selected":""}>${aiEscape(s.title)}</option>`
+        ).join("")
+      : `<option value="">najpierw wybierz kategorię</option>`;
     previewHtml = `
       <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border,#333)">
         <label class="muted">Tytuł</label>
@@ -1726,11 +1739,22 @@ function aiRenderCard(item) {
         <label class="muted" style="margin-top:6px;display:block">Opis</label>
         <textarea class="ai-desc" rows="4" style="width:100%">${aiEscape(gen.description)}</textarea>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:12px">
+          <div style="grid-column:1/-1">
+            <label class="muted">Kategoria (wpisz, aby wyszukać)</label>
+            <input class="ai-cat" list="aiCatList" type="text" value="${aiEscape(catValue)}" style="width:100%" placeholder="np. Mężczyźni > Obuwie > Sneakersy" />
+            ${aiFieldWarn(res?.catalog_id)}
+          </div>
+          <div>
+            <label class="muted">Rozmiar</label>
+            <select class="ai-size" style="width:100%" ${res?.catalog_id?"":"disabled"}>${sizeOpts}</select>
+            ${aiFieldWarn(res?.size_id)}
+          </div>
+          <div>
+            <label class="muted">Stan</label>
+            <select class="ai-status" style="width:100%">${statusOpts}</select>
+          </div>
           <div><b>Marka:</b> ${aiEscape(res?.brand_title) || "—"} ${aiFieldWarn(res?.brand_id)}</div>
-          <div><b>Kategoria:</b> ${aiEscape(res?.catalog_title) || "—"} ${aiFieldWarn(res?.catalog_id)}</div>
-          <div><b>Rozmiar:</b> ${aiEscape(res?.size_title) || "—"} ${aiFieldWarn(res?.size_id)}</div>
           <div><b>Kolor:</b> ${aiEscape(res?.color_title) || "—"} ${aiFieldWarn(res?.color_id)}</div>
-          <div><b>Stan:</b> ${aiEscape(res?.status_label) || "—"} ${aiFieldWarn(res?.status_id)}</div>
           <div><b>Paczka (ID):</b> ${res?.package_size_id ?? "—"} ${aiFieldWarn(res?.package_size_id)}</div>
         </div>
       </div>`;
@@ -1754,7 +1778,7 @@ function aiRenderCard(item) {
         </div>
         <div>
           <label class="muted">Rozmiar</label>
-          <input class="ai-size" type="text" value="${aiEscape(item.size)}" style="width:100%" placeholder="np. 43" />
+          <input class="ai-size-in" type="text" value="${aiEscape(item.size)}" style="width:100%" placeholder="np. 45 (EU)" />
         </div>
         <div>
           <label class="muted">Cena (PLN)</label>
@@ -1785,7 +1809,7 @@ function aiRenderCard(item) {
   });
   card.querySelector(".ai-name").addEventListener("input", e => { item.name = e.target.value; });
   card.querySelector(".ai-condition").addEventListener("input", e => { item.condition = e.target.value; });
-  card.querySelector(".ai-size").addEventListener("input", e => { item.size = e.target.value; });
+  card.querySelector(".ai-size-in").addEventListener("input", e => { item.size = e.target.value; });
   card.querySelector(".ai-price").addEventListener("input", e => { item.price = e.target.value; });
   card.querySelector(".ai-package").addEventListener("change", e => { item.packageSize = e.target.value; });
   card.querySelector(".ai-remove").addEventListener("click", () => {
@@ -1797,7 +1821,47 @@ function aiRenderCard(item) {
   if (titleEl) titleEl.addEventListener("input", e => { if (item.gen) item.gen.title = e.target.value; });
   const descEl = card.querySelector(".ai-desc");
   if (descEl) descEl.addEventListener("input", e => { if (item.gen) item.gen.description = e.target.value; });
+
+  const statusEl = card.querySelector(".ai-status");
+  if (statusEl) statusEl.addEventListener("change", e => {
+    const label = e.target.value;
+    item.resolved = item.resolved || {};
+    item.resolved.status_label = label;
+    item.resolved.status_id = AI_STATUS_MAP[label] || null;
+  });
+  const catEl = card.querySelector(".ai-cat");
+  if (catEl) catEl.addEventListener("change", async e => {
+    const val = e.target.value;
+    const id = aiFindLeafIdByLabel(val);
+    item.resolved = item.resolved || {};
+    if (id) {
+      item.resolved.catalog_id = id;
+      const leaf = aiCatalogLeaves.find(l => l.id === id);
+      item.resolved.catalog_title = leaf?.title || val;
+      item.resolved.size_id = null;
+      item.resolved.size_title = "";
+      await aiLoadSizesForCatalog(id);
+      const sizes = aiSizesCache[id] || [];
+      const pick = aiPickSizeFromList(sizes, item.size);
+      if (pick) { item.resolved.size_id = pick.id; item.resolved.size_title = pick.title; }
+      aiRenderCard(item);
+    } else {
+      item.resolved.catalog_id = null;
+      item.resolved.catalog_title = "";
+      aiRenderCard(item);
+    }
+  });
+  const sizeEl = card.querySelector(".ai-size");
+  if (sizeEl && res?.catalog_id) sizeEl.addEventListener("change", e => {
+    const id = Number(e.target.value) || null;
+    item.resolved = item.resolved || {};
+    item.resolved.size_id = id;
+    const sizes = aiSizesCache[res.catalog_id] || [];
+    const hit = sizes.find(s => Number(s.id) === id);
+    item.resolved.size_title = hit ? hit.title : "";
+  });
 }
+
 
 function aiAddCard(seed) {
   const item = Object.assign({
