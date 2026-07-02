@@ -169,12 +169,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.kind === "GET_STATUS") {
-    getConfig().then(({ user, panelUrl, session, settings }) =>
+    getConfig().then(({ user, panelUrl, session, settings, supabaseUrl, supabaseAnonKey }) =>
       sendResponse({
         user: user ?? null,
         panelUrl,
         signedIn: !!session?.access_token,
         settings,
+        supabaseToken: session?.access_token || null,
+        supabaseUrl: supabaseUrl || "https://vdkxhhgoloiylkscessp.supabase.co",
+        supabaseAnonKey: supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZka3hoaGdvbG9peWxrc2Nlc3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NjYxMjUsImV4cCI6MjA5ODI0MjEyNX0.ZQzRkY2Utf405okkc0b-JJK2zXW40C0EM9XxlzWUOek",
       }),
     );
     return true;

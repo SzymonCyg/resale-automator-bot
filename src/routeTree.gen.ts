@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedExtensionConnectRouteImport } from './routes/_authenticated/extension-connect'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as ApiPublicExtensionSyncItemsRouteImport } from './routes/api/public/extension/sync-items'
@@ -30,6 +31,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedExtensionConnectRoute =
   AuthenticatedExtensionConnectRouteImport.update({
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/extension-connect': typeof AuthenticatedExtensionConnectRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
   '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/extension-connect': typeof AuthenticatedExtensionConnectRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
   '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/extension-connect': typeof AuthenticatedExtensionConnectRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/accounts/$accountId/items': typeof AuthenticatedAccountsAccountIdItemsRoute
   '/api/public/extension/sync-items': typeof ApiPublicExtensionSyncItemsRoute
 }
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dashboard'
     | '/extension-connect'
+    | '/settings'
     | '/accounts/$accountId/items'
     | '/api/public/extension/sync-items'
   fileRoutesByTo: FileRoutesByTo
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dashboard'
     | '/extension-connect'
+    | '/settings'
     | '/accounts/$accountId/items'
     | '/api/public/extension/sync-items'
   id:
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/dashboard'
     | '/_authenticated/extension-connect'
+    | '/_authenticated/settings'
     | '/_authenticated/accounts/$accountId/items'
     | '/api/public/extension/sync-items'
   fileRoutesById: FileRoutesById
@@ -138,6 +150,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/extension-connect': {
       id: '/_authenticated/extension-connect'
@@ -173,12 +192,14 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedExtensionConnectRoute: typeof AuthenticatedExtensionConnectRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedAccountsAccountIdItemsRoute: typeof AuthenticatedAccountsAccountIdItemsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedExtensionConnectRoute: AuthenticatedExtensionConnectRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedAccountsAccountIdItemsRoute:
     AuthenticatedAccountsAccountIdItemsRoute,
 }
