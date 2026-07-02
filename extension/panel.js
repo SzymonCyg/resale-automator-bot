@@ -282,19 +282,22 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
     try {
       const r = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL_V2", id: it.id });
       const detail = r?.item || it;
+      if (i === 0) {
+        try {
+          const keys = detail ? Object.keys(detail) : [];
+          const rel = {};
+          for (const k of keys) { if (/size|catalog|categ|brand|color|status|condition/i.test(k)) rel[k] = JSON.stringify(detail[k])?.slice(0,90); }
+          const el = document.getElementById("exportDebug");
+          if (el) el.textContent = "DETAIL keys: " + keys.join(",") + "\n\nrel: " + JSON.stringify(rel, null, 1);
+          console.log("VM_DETAIL_DIAG", detail);
+        } catch(e) {}
+      }
       let labels = null;
       try {
         const lab = await vintedMsg(tab.id, { kind: "FETCH_ITEM_LABELS_V2", id: it.id });
         labels = lab?.labels || null;
-        if (i === 0) {
-          try {
-            const dbg = lab?.diag ? JSON.stringify(lab.diag) : "brak diag";
-            const el = document.getElementById("exportDebug");
-            if (el) el.textContent = "DIAG (1. przedmiot): " + dbg;
-            console.log("VM_LABELS_DIAG", lab?.diag);
-          } catch {}
-        }
       } catch (e) { console.warn("labels failed", it.id, e); }
+
       let photoUrls = (detail.photos || [])
         .map((p) => p?.full_size_url || p?.url)
         .filter(Boolean);
