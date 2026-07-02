@@ -26,13 +26,19 @@ function ItemsPage() {
   const { accountId } = Route.useParams();
   const getA = useServerFn(getAccount);
   const list = useServerFn(listItems);
+  const bumpFn = useServerFn(bumpItem);
+  const deleteFn = useServerFn(deleteItem);
+  const runRunner = useServerFn(runTaskRunner);
+  const logsFn = useServerFn(listActionLogs);
   const accountQ = useQuery({ queryKey: ["account", accountId], queryFn: () => getA({ data: { accountId } }) });
   const itemsQ = useQuery({ queryKey: ["items", accountId], queryFn: () => list({ data: { accountId } }) });
+  const logsQ = useQuery({ queryKey: ["logs", accountId], queryFn: () => logsFn({ data: { accountId } }) });
 
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [deleting, setDeleting] = useState(false);
+  const [busy, setBusy] = useState<"" | "bump" | "delete">("");
+  const [showLogs, setShowLogs] = useState(false);
 
   const filtered = useMemo(() => {
     if (!itemsQ.data) return [];
