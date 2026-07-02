@@ -172,6 +172,14 @@ function ItemsPage() {
               <tbody className="divide-y divide-border">
                 {filtered.map((it) => (
                   <tr key={it.id} className="hover:bg-surface-2">
+                    <td className="px-4 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(it.vinted_item_id)}
+                        onChange={() => toggleOne(it.vinted_item_id)}
+                        className="cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-2">
                       {it.photo_url ? (
                         <img src={it.photo_url} alt="" className="h-12 w-12 rounded object-cover" loading="lazy" />
