@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.20";
+  const CONTENT_VERSION = "1.0.21";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -905,7 +905,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RESOLVE_AI_ATTRS_V2","GET_CATALOG_LEAVES_V2","GET_CATALOG_SIZES_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RESOLVE_AI_ATTRS_V2","GET_CATALOG_LEAVES_V2","GET_CATALOG_SIZES_V2","SEARCH_BRANDS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
@@ -976,6 +976,25 @@
           const sizeAttr = (attrs || []).find(a => a && a.code === "size");
           const sizes = sizeAttr ? collectIdTitle(sizeAttr, []).map(s => ({ id: Number(s.id), title: String(s.title) })) : [];
           sendResponse({ ok: true, sizes });
+        }
+        else if (msg.kind === "SEARCH_BRANDS_V2") {
+          const q = String(msg.query || "").trim();
+          if (q.length < 2) { sendResponse({ ok: true, brands: [] }); return; }
+          let list = [];
+          try {
+            const enc = encodeURIComponent(q);
+            let r = null;
+            try { r = await vintedApi(`/api/v2/brands?search_text=${enc}`); } catch {}
+            list = (r && (r.brands || r.dtos)) || [];
+            if (!list.length) {
+              try {
+                const r2 = await vintedApi(`/api/v2/brands?keyword=${enc}`);
+                list = (r2 && (r2.brands || r2.dtos)) || [];
+              } catch {}
+            }
+          } catch {}
+          const out = list.slice(0, 25).map(b => ({ id: Number(b.id), title: String(b.title || "") }));
+          sendResponse({ ok: true, brands: out });
         }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
