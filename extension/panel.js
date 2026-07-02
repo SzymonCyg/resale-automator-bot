@@ -2244,29 +2244,48 @@ function aiRenderCard(item) {
     item.resolved.size_title = hit ? hit.title : "";
   });
 
-  // Brand picker events
-  const brandSearchInput = card.querySelector(".ai-brand-search-input");
-  if (brandSearchInput) {
-    brandSearchInput.addEventListener("input", e => {
-      item._brandSearch = e.target.value;
-      aiRenderCard(item);
+  // Brand live search input
+  const brandInput = card.querySelector(".ai-brand");
+  if (brandInput) {
+    brandInput.addEventListener("input", (e) => {
+      const v = e.target.value;
+      item.resolved = item.resolved || {};
+      if (v && v.length >= 2) aiScheduleBrandSearch(v);
+      if (aiBrandByLabel[v] != null) {
+        item.resolved.brand_id = aiBrandByLabel[v];
+        item.resolved.brand_title = v;
+      } else {
+        item.resolved.brand_id = null;
+        item.resolved.brand_title = v;
+      }
+    });
+    brandInput.addEventListener("change", async (e) => {
+      const v = e.target.value;
+      item.resolved = item.resolved || {};
+      if (aiBrandByLabel[v] != null) {
+        item.resolved.brand_id = aiBrandByLabel[v];
+        item.resolved.brand_title = v;
+      } else {
+        _aiBrandSearchLast = "";
+        await aiSearchBrands(v);
+        if (aiBrandByLabel[v] != null) {
+          item.resolved.brand_id = aiBrandByLabel[v];
+          item.resolved.brand_title = v;
+        } else {
+          item.resolved.brand_id = null;
+          item.resolved.brand_title = v;
+        }
+      }
+      // refresh only the warning marker, avoid losing focus
+      const parent = brandInput.parentElement;
+      if (parent) {
+        const warn = parent.querySelector(".field-warn");
+        const html = aiFieldWarn(item.resolved.brand_id);
+        if (warn) warn.outerHTML = html || "";
+        else if (html) parent.insertAdjacentHTML("beforeend", html);
+      }
     });
   }
-  card.querySelectorAll(".ai-brand-opt").forEach(btn => btn.addEventListener("click", () => {
-    item.resolved = item.resolved || {};
-    item.resolved.brand_id = Number(btn.dataset.bid);
-    item.resolved.brand_title = btn.dataset.bname;
-    item._brandSearch = "";
-    aiRenderCard(item);
-  }));
-  const brandClear = card.querySelector(".ai-brand-clear");
-  if (brandClear) brandClear.addEventListener("click", () => {
-    item.resolved = item.resolved || {};
-    item.resolved.brand_id = null;
-    item.resolved.brand_title = "";
-    item._brandSearch = "";
-    aiRenderCard(item);
-  });
 
   // Color picker events
   card.querySelectorAll(".ai-color-btn").forEach(btn => btn.addEventListener("click", () => {
