@@ -1701,31 +1701,46 @@ const AI_COLORS = [
   {id:36, t:"Perłowy",     hex:"#F5F0E8", border:true},
 ];
 
+let aiBrandByLabel = {};
+let _aiBrandSearchTimer = null;
+let _aiBrandSearchLast = "";
+
+async function aiSearchBrands(query) {
+  const q = String(query || "").trim();
+  if (q.length < 2) return;
+  if (q === _aiBrandSearchLast) return;
+  _aiBrandSearchLast = q;
+  try {
+    const tab = await getVintedTab();
+    if (!tab) return;
+    const r = await vintedMsg(tab.id, { kind: "SEARCH_BRANDS_V2", query: q });
+    const brands = (r && r.brands) || [];
+    aiBrandByLabel = {};
+    const dl = document.getElementById("aiBrandList");
+    if (!dl) return;
+    dl.innerHTML = "";
+    for (const b of brands) {
+      if (!b || !b.title) continue;
+      aiBrandByLabel[b.title] = Number(b.id);
+      const opt = document.createElement("option");
+      opt.value = b.title;
+      dl.appendChild(opt);
+    }
+  } catch {}
+}
+
+function aiScheduleBrandSearch(query) {
+  clearTimeout(_aiBrandSearchTimer);
+  _aiBrandSearchTimer = setTimeout(() => aiSearchBrands(query), 300);
+}
+
 function aiBrandPickerHtml(item) {
   const res = item.resolved || {};
-  const selected = res.brand_id ? AI_BRANDS.find(b => b.id === Number(res.brand_id)) : null;
-  const query = item._brandSearch || "";
-  const filtered = query.length >= 2
-    ? AI_BRANDS.filter(b => b.t.toLowerCase().includes(query.toLowerCase())).slice(0, 20)
-    : AI_BRANDS.slice(0, 30);
-
+  const val = res.brand_title || "";
   return `
-    <div class="ai-brand-picker" style="position:relative">
-      ${selected
-        ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-             <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:12px;font-size:12px;display:inline-flex;align-items:center;gap:6px">
-               ${aiEscape(selected.t)}
-               <button type="button" class="ai-brand-clear" style="background:transparent;border:0;color:#166534;cursor:pointer;font-weight:bold;font-size:14px">×</button>
-             </span>
-           </div>`
-        : ""}
-      <input class="ai-brand-search-input" type="text" placeholder="Szukaj marki…" value="${aiEscape(query)}" style="width:100%;margin-bottom:4px" />
-      <div class="ai-brand-list" style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
-        ${filtered.map(b =>
-          `<button type="button" class="btn ai-brand-opt${selected && selected.id === b.id ? " primary" : ""}" data-bid="${b.id}" data-bname="${aiEscape(b.t)}" style="font-size:11px;padding:3px 8px">${aiEscape(b.t)}</button>`
-        ).join("")}
-      </div>
-      ${!selected ? `<div class="muted" style="color:#c47b00;font-size:11px;margin-top:4px">⚠ nie rozpoznano — wybierz markę ręcznie</div>` : ""}
+    <div class="ai-brand-picker">
+      <input class="ai-brand" list="aiBrandList" type="text" value="${aiEscape(val)}" placeholder="wpisz markę, np. Sprandi" style="width:100%" />
+      ${aiFieldWarn(res.brand_id)}
     </div>`;
 }
 
