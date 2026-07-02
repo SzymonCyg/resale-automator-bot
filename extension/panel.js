@@ -319,11 +319,12 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
         _it: it,
         _detail: detail,
         _labels: labels,
+        _resolved: resolved,
         _photos: mirrored,
       });
     } catch (e) {
       console.warn("item failed", it.id, e);
-      rows.push({ _it: it, _detail: it, _labels: null, _photos: [] });
+      rows.push({ _it: it, _detail: it, _labels: null, _resolved: null, _photos: [] });
     }
     await new Promise((res) => setTimeout(res, 400 + Math.random() * 400));
   }
