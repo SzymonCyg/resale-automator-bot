@@ -4,10 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { getAccount, listItems } from "@/lib/vinted.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileCode2, FileDown, FileSpreadsheet, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { FileCode2, FileDown, FileSpreadsheet, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { exportToCSV, exportToExcel, exportToXML } from "@/lib/export";
 import { AccountHeader } from "@/components/account-header";
+import { vintedProxy } from "@/lib/vintedProxy";
 
 export const Route = createFileRoute("/_authenticated/accounts/$accountId/items")({
   head: () => ({ meta: [{ title: "Przedmioty — Vinted Manager" }] }),
