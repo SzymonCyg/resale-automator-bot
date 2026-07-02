@@ -106,36 +106,71 @@ function ItemsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {selected.size > 0 && (
-            <Button
-              variant="destructive"
-              disabled={deleting}
-              onClick={async () => {
-                if (!confirm(`Usunąć ${selected.size} przedmiot(ów) z Vinted? Tej akcji nie można cofnąć.`)) return;
-                setDeleting(true);
-                let ok = 0, err = 0;
-                for (const vintedId of [...selected]) {
-                  try {
-                    await vintedProxy({
-                      method: "DELETE",
-                      path: `/api/v2/items/${vintedId}`,
-                      domain: (account as { country?: string } | undefined)?.country,
-                    });
-                    ok++;
-                  } catch (e) {
-                    console.warn("Delete failed", vintedId, e);
-                    err++;
+            <>
+              <Button
+                variant="outline"
+                disabled={busy !== ""}
+                onClick={async () => {
+                  const items = filtered.filter((i) => selected.has(i.vinted_item_id));
+                  setBusy("bump");
+                  let ok = 0, err = 0;
+                  for (const it of items) {
+                    try {
+                      await bumpFn({ data: { accountId, itemId: it.id, vintedItemId: it.vinted_item_id } });
+                      ok++;
+                    } catch (e) {
+                      console.warn("Bump task create failed", it.vinted_item_id, e);
+                      err++;
+                    }
                   }
-                  await new Promise((r) => setTimeout(r, 800));
-                }
-                setSelected(new Set());
-                setDeleting(false);
-                itemsQ.refetch();
-                alert(`Usunięto: ${ok}${err ? `, błędy: ${err}` : ""}`);
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              {deleting ? "Usuwam..." : `Usuń zaznaczone (${selected.size})`}
-            </Button>
+                  try {
+                    const res = await runRunner();
+                    toast.success(`Odświeżanie: kolejka ${ok}${err ? `, błędy ${err}` : ""}. Wykonano: ${res?.processed ?? 0}`);
+                  } catch (e) {
+                    toast.error(`Task runner: ${(e as Error).message}`);
+                  }
+                  setSelected(new Set());
+                  setBusy("");
+                  itemsQ.refetch();
+                  logsQ.refetch();
+                }}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${busy === "bump" ? "animate-spin" : ""}`} />
+                {busy === "bump" ? "Odświeżam..." : `Odśwież zaznaczone (${selected.size})`}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={busy !== ""}
+                onClick={async () => {
+                  if (!confirm(`Usunąć ${selected.size} przedmiot(ów) z Vinted? Tej akcji nie można cofnąć.`)) return;
+                  const items = filtered.filter((i) => selected.has(i.vinted_item_id));
+                  setBusy("delete");
+                  let ok = 0, err = 0;
+                  for (const it of items) {
+                    try {
+                      await deleteFn({ data: { accountId, itemId: it.id, vintedItemId: it.vinted_item_id, title: it.title ?? undefined } });
+                      ok++;
+                    } catch (e) {
+                      console.warn("Delete task create failed", it.vinted_item_id, e);
+                      err++;
+                    }
+                  }
+                  try {
+                    const res = await runRunner();
+                    toast.success(`Usuwanie: kolejka ${ok}${err ? `, błędy ${err}` : ""}. Wykonano: ${res?.processed ?? 0}`);
+                  } catch (e) {
+                    toast.error(`Task runner: ${(e as Error).message}`);
+                  }
+                  setSelected(new Set());
+                  setBusy("");
+                  itemsQ.refetch();
+                  logsQ.refetch();
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {busy === "delete" ? "Usuwam..." : `Usuń zaznaczone (${selected.size})`}
+              </Button>
+            </>
           )}
           <Button variant="outline" onClick={() => exportToCSV(filtered, `vinted-${base}.csv`)} disabled={!filtered.length}>
             <FileDown className="mr-2 h-4 w-4" /> CSV
