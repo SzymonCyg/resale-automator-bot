@@ -2013,7 +2013,7 @@ function aiRefreshActionsVisibility() {
   if (delayRow) delayRow.classList.toggle("hidden", !(anyGen && aiItems.length > 1));
 }
 
-async function generateListingAI(input) {
+async function generateListingAI(input, categoryLeaves) {
   const { session, supabaseUrl, supabaseAnonKey } = await chrome.storage.local.get([
     "session", "supabaseUrl", "supabaseAnonKey",
   ]);
@@ -2033,6 +2033,7 @@ async function generateListingAI(input) {
       size: input.size || "",
       price: input.price || "",
       packageSize: input.packageSize || "",
+      categoryLeaves: Array.isArray(categoryLeaves) ? categoryLeaves : [],
     }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2047,6 +2048,7 @@ async function generateListingAI(input) {
     condition: data.condition || "",
   };
 }
+
 
 async function initAiUI() {
   try {
