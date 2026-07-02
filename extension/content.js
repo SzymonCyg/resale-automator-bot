@@ -356,6 +356,78 @@
     return { brand, size, category, colors };
   }
 
+  // ============ Catalog & size dictionary resolvers ============
+  let vmCatalogTree = null;
+  const vmCatalogAttrCache = {};
+
+  async function loadCatalogTree() {
+    if (vmCatalogTree) return vmCatalogTree;
+    try {
+      const r = await vintedApi("/api/v2/item_upload/catalogs");
+      vmCatalogTree = r?.catalogs || r?.dtos || r?.catalog || r || [];
+    } catch { vmCatalogTree = []; }
+    return vmCatalogTree;
+  }
+
+  function findInTree(nodes, id) {
+    if (!nodes) return "";
+    const arr = Array.isArray(nodes) ? nodes : [nodes];
+    for (const n of arr) {
+      if (!n || typeof n !== "object") continue;
+      if (Number(n.id) === Number(id) && n.title) return n.title;
+      const kids = n.catalogs || n.children || n.catalog;
+      if (kids) {
+        const hit = findInTree(kids, id);
+        if (hit) return hit;
+      }
+    }
+    return "";
+  }
+
+  async function resolveCategoryName(catalogId) {
+    if (!catalogId) return "";
+    const tree = await loadCatalogTree();
+    return findInTree(tree, Number(catalogId)) || "";
+  }
+
+  async function loadCatalogAttributes(catalogId) {
+    if (vmCatalogAttrCache[catalogId]) return vmCatalogAttrCache[catalogId];
+    try {
+      const r = await vintedApi(`/api/v2/item_upload/attributes?catalog_id=${catalogId}`);
+      vmCatalogAttrCache[catalogId] = r?.attributes || r?.dtos || [];
+    } catch { vmCatalogAttrCache[catalogId] = []; }
+    return vmCatalogAttrCache[catalogId];
+  }
+
+  function collectIdTitle(node, acc) {
+    if (!node) return acc;
+    if (Array.isArray(node)) { for (const n of node) collectIdTitle(n, acc); return acc; }
+    if (typeof node !== "object") return acc;
+    if (node.id != null && node.title) acc.push({ id: Number(node.id), title: String(node.title) });
+    for (const key of ["options", "configuration", "sizes", "values", "items", "children"]) {
+      if (node[key]) collectIdTitle(node[key], acc);
+    }
+    for (const k of Object.keys(node)) {
+      const v = node[k];
+      if (v && typeof v === "object" && !["options","configuration","sizes","values","items","children"].includes(k)) {
+        collectIdTitle(v, acc);
+      }
+    }
+    return acc;
+  }
+
+  async function resolveSizeName(catalogId, sizeId) {
+    if (!sizeId) return "";
+    const attrs = await loadCatalogAttributes(catalogId);
+    const sizeAttr = (attrs || []).find(a => a && a.code === "size");
+    if (!sizeAttr) return "";
+    const all = collectIdTitle(sizeAttr, []);
+    const hit = all.find(x => x.id === Number(sizeId));
+    return hit ? hit.title : "";
+  }
+
+
+
 
 
 
