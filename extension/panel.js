@@ -1867,19 +1867,34 @@ function aiEscape(s) {
 }
 
 async function readFilesAsDataUrls(files) {
-  const out = [];
+  const out = []; const failed = [];
   for (const f of files) {
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = () => reject(new Error("FileReader"));
-        r.readAsDataURL(f);
-      });
-      out.push(dataUrl);
-    } catch {}
+      let bmp = null;
+      try { bmp = await createImageBitmap(f); }
+      catch {
+        bmp = await new Promise((resolve, reject) => {
+          const u = URL.createObjectURL(f);
+          const im = new Image();
+          im.onload = () => resolve(im);
+          im.onerror = () => { URL.revokeObjectURL(u); reject(new Error("decode")); };
+          im.src = u;
+        });
+      }
+      const w = bmp.width || bmp.naturalWidth, h = bmp.height || bmp.naturalHeight;
+      if (!w || !h) throw new Error("decode");
+      const MAX = 2048;
+      const scale = Math.min(1, MAX / Math.max(w, h));
+      const cw = Math.round(w * scale), ch = Math.round(h * scale);
+      const c = document.createElement("canvas");
+      c.width = cw; c.height = ch;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cw, ch);
+      ctx.drawImage(bmp, 0, 0, cw, ch);
+      out.push(c.toDataURL("image/jpeg", 0.9));
+    } catch { failed.push((f && f.name) || "plik"); }
   }
-  return out;
+  return { urls: out, failed };
 }
 
 function aiFieldWarn(v) {
