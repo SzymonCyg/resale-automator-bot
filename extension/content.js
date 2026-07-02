@@ -905,7 +905,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RESOLVE_AI_ATTRS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RESOLVE_AI_ATTRS_V2","GET_CATALOG_LEAVES_V2","GET_CATALOG_SIZES_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
