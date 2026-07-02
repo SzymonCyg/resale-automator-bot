@@ -787,6 +787,17 @@
           } : { pubNull: true };
           sendResponse({ ok: true, labels, diag });
         }
+        else if (msg.kind === "RESOLVE_LABELS_V2") {
+          const category = await resolveCategoryName(msg.catalog_id);
+          const size = await resolveSizeName(msg.catalog_id, msg.size_id);
+          const diag = {
+            treeType: Array.isArray(vmCatalogTree) ? `arr(${vmCatalogTree.length})` : typeof vmCatalogTree,
+            firstNodeKeys: Array.isArray(vmCatalogTree) && vmCatalogTree[0] ? Object.keys(vmCatalogTree[0]) : [],
+            attrCodes: (vmCatalogAttrCache[msg.catalog_id] || []).map(a => a && a.code).slice(0, 20),
+            resolvedSize: size, resolvedCategory: category,
+          };
+          sendResponse({ ok: true, size, category, diag });
+        }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
         else if (msg.kind === "PUBLISH_DRAFT_V2") sendResponse({ ok: true, ...(await publishExistingDraft(msg.id)) });
