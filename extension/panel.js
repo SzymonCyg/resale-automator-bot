@@ -1590,3 +1590,327 @@ document.getElementById("publishDraftsBtn")?.addEventListener("click", async () 
 });
 
 initPublishDraftsUI();
+
+// =================== DODAJ Z AI ===================
+let aiItems = [];
+const AI_DELAY_DEFAULTS = { aiDelayMin: 30, aiDelayMax: 60 };
+
+function aiUid() { return "ai_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+function aiLog(msg, cls = "") {
+  const el = document.getElementById("aiRunLog");
+  if (!el) return;
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  const ts = new Date().toLocaleTimeString();
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function aiEscape(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+async function readFilesAsDataUrls(files) {
+  const out = [];
+  for (const f of files) {
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(new Error("FileReader"));
+        r.readAsDataURL(f);
+      });
+      out.push(dataUrl);
+    } catch {}
+  }
+  return out;
+}
+
+function aiFieldWarn(v) {
+  return (v == null || v === "" ) ? `<div class="muted" style="color:#c47b00">⚠ nie rozpoznano — popraw nazwę/rozmiar i wygeneruj ponownie</div>` : "";
+}
+
+function aiRenderCard(item) {
+  const container = document.getElementById("aiItems");
+  if (!container) return;
+  let card = container.querySelector(`[data-ai-id="${item.id}"]`);
+  if (!card) {
+    card = document.createElement("div");
+    card.className = "card";
+    card.style.padding = "12px";
+    card.style.border = "1px solid var(--border, #333)";
+    card.style.borderRadius = "8px";
+    card.dataset.aiId = item.id;
+    container.appendChild(card);
+  }
+  const thumbs = (item.photos || []).map(u =>
+    `<img src="${aiEscape(u)}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;margin:2px" />`
+  ).join("");
+  const gen = item.gen;
+  const res = item.resolved;
+
+  let previewHtml = "";
+  if (gen) {
+    previewHtml = `
+      <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border,#333)">
+        <label class="muted">Tytuł</label>
+        <input class="ai-title" type="text" value="${aiEscape(gen.title)}" style="width:100%" />
+        <label class="muted" style="margin-top:6px;display:block">Opis</label>
+        <textarea class="ai-desc" rows="4" style="width:100%">${aiEscape(gen.description)}</textarea>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:12px">
+          <div><b>Marka:</b> ${aiEscape(res?.brand_title) || "—"} ${aiFieldWarn(res?.brand_id)}</div>
+          <div><b>Kategoria:</b> ${aiEscape(res?.catalog_title) || "—"} ${aiFieldWarn(res?.catalog_id)}</div>
+          <div><b>Rozmiar:</b> ${aiEscape(res?.size_title) || "—"} ${aiFieldWarn(res?.size_id)}</div>
+          <div><b>Kolor:</b> ${aiEscape(res?.color_title) || "—"} ${aiFieldWarn(res?.color_id)}</div>
+          <div><b>Stan:</b> ${aiEscape(res?.status_label) || "—"} ${aiFieldWarn(res?.status_id)}</div>
+          <div><b>Paczka (ID):</b> ${res?.package_size_id ?? "—"} ${aiFieldWarn(res?.package_size_id)}</div>
+        </div>
+      </div>`;
+  }
+
+  card.innerHTML = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:1;min-width:260px">
+        <label class="muted">Zdjęcia</label>
+        <input class="ai-photos" type="file" accept="image/*" multiple />
+        <div class="ai-thumbs" style="display:flex;flex-wrap:wrap;margin-top:4px">${thumbs}</div>
+      </div>
+      <div style="flex:2;min-width:260px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="grid-column:1/-1">
+          <label class="muted">Nazwa produktu</label>
+          <input class="ai-name" type="text" value="${aiEscape(item.name)}" style="width:100%" placeholder="np. Nike Air Force 1 białe" />
+        </div>
+        <div style="grid-column:1/-1">
+          <label class="muted">Opis stanu (wady, użycie)</label>
+          <textarea class="ai-condition" rows="2" style="width:100%" placeholder="np. lekkie zabrudzenia na podeszwie">${aiEscape(item.condition)}</textarea>
+        </div>
+        <div>
+          <label class="muted">Rozmiar</label>
+          <input class="ai-size" type="text" value="${aiEscape(item.size)}" style="width:100%" placeholder="np. 43" />
+        </div>
+        <div>
+          <label class="muted">Cena (PLN)</label>
+          <input class="ai-price" type="number" min="0" step="0.01" value="${aiEscape(item.price)}" style="width:100%" />
+        </div>
+        <div>
+          <label class="muted">Wielkość paczki</label>
+          <select class="ai-package" style="width:100%">
+            <option value="S"${item.packageSize==="S"?" selected":""}>Mała (S)</option>
+            <option value="M"${item.packageSize==="M"?" selected":""}>Średnia (M)</option>
+            <option value="L"${item.packageSize==="L"?" selected":""}>Duża (L)</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;justify-content:flex-end">
+          <button class="btn ghost ai-remove" type="button">Usuń</button>
+        </div>
+      </div>
+    </div>
+    ${previewHtml}
+  `;
+
+  card.querySelector(".ai-photos").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const urls = await readFilesAsDataUrls(files);
+    item.photos = (item.photos || []).concat(urls);
+    aiRenderCard(item);
+  });
+  card.querySelector(".ai-name").addEventListener("input", e => { item.name = e.target.value; });
+  card.querySelector(".ai-condition").addEventListener("input", e => { item.condition = e.target.value; });
+  card.querySelector(".ai-size").addEventListener("input", e => { item.size = e.target.value; });
+  card.querySelector(".ai-price").addEventListener("input", e => { item.price = e.target.value; });
+  card.querySelector(".ai-package").addEventListener("change", e => { item.packageSize = e.target.value; });
+  card.querySelector(".ai-remove").addEventListener("click", () => {
+    aiItems = aiItems.filter(x => x.id !== item.id);
+    card.remove();
+    aiRefreshActionsVisibility();
+  });
+  const titleEl = card.querySelector(".ai-title");
+  if (titleEl) titleEl.addEventListener("input", e => { if (item.gen) item.gen.title = e.target.value; });
+  const descEl = card.querySelector(".ai-desc");
+  if (descEl) descEl.addEventListener("input", e => { if (item.gen) item.gen.description = e.target.value; });
+}
+
+function aiAddCard(seed) {
+  const item = Object.assign({
+    id: aiUid(), photos: [], name: "", condition: "", size: "", price: "", packageSize: "M", gen: null, resolved: null,
+  }, seed || {});
+  aiItems.push(item);
+  aiRenderCard(item);
+  return item;
+}
+
+function aiRefreshActionsVisibility() {
+  const actions = document.getElementById("aiActions");
+  const delayRow = document.getElementById("aiDelayRow");
+  if (!actions) return;
+  const anyGen = aiItems.some(it => it.gen);
+  actions.classList.toggle("hidden", !anyGen);
+  if (delayRow) delayRow.classList.toggle("hidden", !(anyGen && aiItems.length > 1));
+}
+
+async function generateListingAI(input) {
+  const { session, supabaseUrl, supabaseAnonKey } = await chrome.storage.local.get([
+    "session", "supabaseUrl", "supabaseAnonKey",
+  ]);
+  const base = supabaseUrl || "https://vdkxhhgoloiylkscessp.supabase.co";
+  const token = session?.access_token || "";
+  const anon = supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZka3hoaGdvbG9peWxrc2Nlc3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NjYxMjUsImV4cCI6MjA5ODI0MjEyNX0.ZQzRkY2Utf405okkc0b-JJK2zXW40C0EM9XxlzWUOek";
+  const res = await fetch(`${base}/functions/v1/generate-listing`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token || anon}`,
+      "apikey": anon,
+    },
+    body: JSON.stringify({
+      name: input.name || "",
+      condition: input.condition || "",
+      size: input.size || "",
+      price: input.price || "",
+      packageSize: input.packageSize || "",
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return {
+    title: data.title || "",
+    description: data.description || "",
+    brand: data.brand || "",
+    category: data.category || "",
+    color: data.color || "",
+    condition: data.condition || "",
+  };
+}
+
+async function initAiUI() {
+  try {
+    const s = await chrome.storage.local.get(["aiDelayMin", "aiDelayMax"]);
+    const mn = Number.isFinite(s.aiDelayMin) ? s.aiDelayMin : AI_DELAY_DEFAULTS.aiDelayMin;
+    const mx = Number.isFinite(s.aiDelayMax) ? s.aiDelayMax : AI_DELAY_DEFAULTS.aiDelayMax;
+    const $mn = document.getElementById("aiDelayMin");
+    const $mx = document.getElementById("aiDelayMax");
+    if ($mn && $mx) {
+      $mn.value = mn; $mx.value = mx;
+      document.getElementById("aiDelayMinLabel").textContent = `${mn}s`;
+      document.getElementById("aiDelayMaxLabel").textContent = `${mx}s`;
+      if (typeof initDualSlider === "function") {
+        initDualSlider("#aiDelayMin", "#aiDelayMax", "#aiDelayRange", "#aiDelayMinLabel", "#aiDelayMaxLabel");
+      }
+    }
+  } catch {}
+  if (!aiItems.length) aiAddCard();
+}
+
+document.getElementById("aiAddItemBtn")?.addEventListener("click", () => { aiAddCard(); });
+
+document.getElementById("aiGenerateBtn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("aiGenerateBtn");
+  const status = document.getElementById("aiGenStatus");
+  const targets = aiItems.filter(it => (it.name || "").trim());
+  if (!targets.length) { aiLog("Uzupełnij co najmniej jeden przedmiot (nazwa)", "err"); return; }
+  const tab = await getVintedTab();
+  if (!tab) { aiLog("Otwórz zalogowaną kartę vinted.*", "err"); return; }
+  btn.disabled = true;
+  try {
+    for (let i = 0; i < targets.length; i++) {
+      const it = targets[i];
+      if (status) status.textContent = `Generuję (${i+1}/${targets.length}): ${it.name}`;
+      aiLog(`Generuję (${i+1}/${targets.length}): ${it.name}`);
+      try {
+        const gen = await generateListingAI(it);
+        it.gen = gen;
+        const r = await vintedMsg(tab.id, {
+          kind: "RESOLVE_AI_ATTRS_V2",
+          category: gen.category, brand: gen.brand, color: gen.color,
+          condition: gen.condition, size: it.size, packageSize: it.packageSize,
+        });
+        it.resolved = r?.resolved || null;
+        aiRenderCard(it);
+        aiLog(`  ✓ wygenerowano: ${gen.title}`, "ok");
+      } catch (e) {
+        aiLog(`  ✗ ${e.message}`, "err");
+      }
+    }
+  } finally {
+    btn.disabled = false;
+    if (status) status.textContent = "";
+    aiRefreshActionsVisibility();
+  }
+});
+
+async function aiRun(mode) {
+  const target = aiItems.filter(it => {
+    const r = it.resolved;
+    return it.gen && (it.photos || []).length &&
+      r && r.catalog_id && r.size_id && r.status_id && Number(it.price) > 0;
+  });
+  const skipped = aiItems.length - target.length;
+  if (skipped > 0) aiLog(`Pomijam ${skipped} niekompletnych przedmiotów`, "warn");
+  if (!target.length) { aiLog("Brak kompletnych przedmiotów do wysłania", "err"); return; }
+  if (mode === "publish" && !confirm(`Opublikować ${target.length} ogłoszeń?`)) return;
+
+  const tab = await getVintedTab();
+  if (!tab) { aiLog("Otwórz zalogowaną kartę vinted.*", "err"); return; }
+
+  const $mn = document.getElementById("aiDelayMin");
+  const $mx = document.getElementById("aiDelayMax");
+  let dMin = parseInt($mn?.value) || AI_DELAY_DEFAULTS.aiDelayMin;
+  let dMax = parseInt($mx?.value) || AI_DELAY_DEFAULTS.aiDelayMax;
+  if (dMax < dMin) dMax = dMin;
+  try { await chrome.storage.local.set({ aiDelayMin: dMin, aiDelayMax: dMax }); } catch {}
+
+  const btnD = document.getElementById("aiDraftBtn");
+  const btnP = document.getElementById("aiPublishBtn");
+  btnD.disabled = true; btnP.disabled = true;
+
+  for (let i = 0; i < target.length; i++) {
+    const it = target[i];
+    if (mode === "publish" && i > 0 && target.length > 1) {
+      const wait = Math.floor(dMin + Math.random() * (dMax - dMin + 1));
+      aiLog(`⏳ Czekam ${wait}s…`);
+      await new Promise(r => setTimeout(r, wait * 1000));
+    } else if (mode === "draft" && (i + 1) % 10 === 0 && i < target.length - 1) {
+      aiLog("⏳ Pauza 10 s (co 10 ogłoszeń)");
+      await new Promise(r => setTimeout(r, 10000));
+    }
+    aiLog(`(${i+1}/${target.length}) ${it.gen.title}`);
+    try {
+      const r = it.resolved;
+      const attributes = {
+        title: it.gen.title,
+        description: it.gen.description,
+        price: Number(it.price),
+        currency: "PLN",
+        brand_id: r.brand_id,
+        brand: r.brand_title,
+        size_id: r.size_id,
+        status_id: r.status_id,
+        catalog_id: r.catalog_id,
+        color_ids: r.color_id ? [r.color_id] : [],
+        package_size_id: r.package_size_id,
+        is_unisex: false,
+      };
+      const resp = await vintedMsg(tab.id, { kind: "CREATE_LISTING_V2", attributes, photos: it.photos, mode });
+      if (resp?.ok) {
+        aiLog(`  ✓ ${mode === "publish" ? "opublikowano" : "zapisano jako draft"} (ID ${resp.id})`, "ok");
+      } else {
+        aiLog(`  ✗ ${resp?.error || "nieznany błąd"}`, "err");
+      }
+    } catch (e) {
+      aiLog(`  ✗ ${e.message}`, "err");
+    }
+  }
+  aiLog("— gotowe —");
+  btnD.disabled = false; btnP.disabled = false;
+}
+
+document.getElementById("aiDraftBtn")?.addEventListener("click", () => aiRun("draft"));
+document.getElementById("aiPublishBtn")?.addEventListener("click", () => aiRun("publish"));
+initAiUI();
+
