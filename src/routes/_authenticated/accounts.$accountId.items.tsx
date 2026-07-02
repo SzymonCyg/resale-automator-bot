@@ -23,17 +23,45 @@ function ItemsPage() {
   const itemsQ = useQuery({ queryKey: ["items", accountId], queryFn: () => list({ data: { accountId } }) });
 
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
   const filtered = useMemo(() => {
     if (!itemsQ.data) return [];
-    if (!q.trim()) return itemsQ.data;
-    const s = q.toLowerCase();
-    return itemsQ.data.filter(
-      (i) =>
-        i.title?.toLowerCase().includes(s) ||
-        i.brand?.toLowerCase().includes(s) ||
-        i.vinted_item_id.includes(s),
-    );
-  }, [itemsQ.data, q]);
+    let rows = itemsQ.data;
+    if (q.trim()) {
+      const s = q.toLowerCase();
+      rows = rows.filter(
+        (i) =>
+          i.title?.toLowerCase().includes(s) ||
+          i.brand?.toLowerCase().includes(s) ||
+          i.vinted_item_id.includes(s),
+      );
+    }
+    if (statusFilter === "active")
+      rows = rows.filter((i) => i.status === "active" || i.status === "visible");
+    if (statusFilter === "inactive")
+      rows = rows.filter((i) => i.status !== "active" && i.status !== "visible");
+    return rows;
+  }, [itemsQ.data, q, statusFilter]);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [q, statusFilter]);
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map((i) => i.vinted_item_id)));
+  }
 
   const account = accountQ.data;
   const base = account?.label ?? "items";
