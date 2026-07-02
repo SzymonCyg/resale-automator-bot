@@ -478,7 +478,12 @@
     if (!list.length) return null;
     const nq = norm(q);
     const exact = list.find(b => norm(b.title) === nq);
-    const pick = exact || list[0];
+    const prefix = !exact ? list.find(b => norm(b.title).startsWith(nq)) : null;
+    const contains = (!exact && !prefix && nq.length >= 3)
+      ? list.find(b => norm(b.title).includes(nq))
+      : null;
+    const pick = exact || prefix || contains;
+    if (!pick) return null;
     return { id: Number(pick.id), title: String(pick.title) };
   }
 
