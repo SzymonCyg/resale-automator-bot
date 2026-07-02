@@ -979,22 +979,28 @@
         }
         else if (msg.kind === "SEARCH_BRANDS_V2") {
           const q = String(msg.query || "").trim();
-          if (q.length < 2) { sendResponse({ ok: true, brands: [] }); return; }
-          let list = [];
-          try {
-            const enc = encodeURIComponent(q);
-            let r = null;
-            try { r = await vintedApi(`/api/v2/brands?search_text=${enc}`); } catch {}
-            list = (r && (r.brands || r.dtos)) || [];
-            if (!list.length) {
-              try {
-                const r2 = await vintedApi(`/api/v2/brands?keyword=${enc}`);
-                list = (r2 && (r2.brands || r2.dtos)) || [];
-              } catch {}
+          if (q.length < 2) { sendResponse({ ok: true, brands: [], diag: { skip: true } }); return; }
+          const enc = encodeURIComponent(q);
+          const tried = [];
+          let brands = [];
+          const paths = [
+            `/api/v2/brands?search_text=${enc}`,
+            `/api/v2/brands?keyword=${enc}`,
+            `/api/v2/item_upload/brands?keyword=${enc}`,
+          ];
+          for (const path of paths) {
+            const label = path.split("?")[0] + (path.includes("search_text") ? "?search_text" : "?keyword");
+            try {
+              const r = await vintedApi(path);
+              const arr = (r && (r.brands || r.dtos)) || (Array.isArray(r) ? r : []);
+              tried.push({ p: label, keys: r ? Object.keys(r).slice(0, 8) : [], count: (arr || []).length });
+              if (arr && arr.length) { brands = arr; break; }
+            } catch (e) {
+              tried.push({ p: label, err: String(e && e.message || e).slice(0, 80) });
             }
-          } catch {}
-          const out = list.slice(0, 25).map(b => ({ id: Number(b.id), title: String(b.title || "") }));
-          sendResponse({ ok: true, brands: out });
+          }
+          const out = (brands || []).slice(0, 25).map(b => ({ id: Number(b.id), title: String(b.title || "") }));
+          sendResponse({ ok: true, brands: out, diag: { tried } });
         }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
