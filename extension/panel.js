@@ -2276,14 +2276,7 @@ function aiRenderCard(item) {
           item.resolved.brand_title = v;
         }
       }
-      // refresh only the warning marker, avoid losing focus
-      const parent = brandInput.parentElement;
-      if (parent) {
-        const warn = parent.querySelector(".field-warn");
-        const html = aiFieldWarn(item.resolved.brand_id);
-        if (warn) warn.outerHTML = html || "";
-        else if (html) parent.insertAdjacentHTML("beforeend", html);
-      }
+      aiRenderCard(item);
     });
   }
 
