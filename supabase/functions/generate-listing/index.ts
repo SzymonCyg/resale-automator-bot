@@ -10,7 +10,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { name, condition, size, price, packageSize } = await req.json();
+    const { name, condition, size, price, packageSize, categoryLeaves } = await req.json();
 
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!anthropicApiKey) {
@@ -18,6 +18,14 @@ Deno.serve(async (req) => {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    let categorySection = '';
+    if (Array.isArray(categoryLeaves) && categoryLeaves.length > 0) {
+      const sample = categoryLeaves.slice(0, 300);
+      categorySection = `\nDOSTĘPNE KATEGORIE VINTED (użyj DOKŁADNIE jednej z tych ścieżek — przepisz ją słowo w słowo):\n${sample.join('\n')}\n`;
+    } else {
+      categorySection = `\nKATEGORIA: Podaj ścieżkę w formacie "Płeć > Dział > Podkategoria", np. "Mężczyźni > Obuwie > Trekkingi"\n`;
     }
 
     const prompt = `Jesteś ekspertem sprzedaży na Vinted. Na podstawie danych sprzedawcy przygotuj profesjonalne ogłoszenie.
@@ -28,72 +36,9 @@ Dane:
 - Rozmiar: ${size || ''}
 - Cena: ${price || ''}
 - Wielkość paczki: ${packageSize || ''}
-
-LISTA KATEGORII VINTED (użyj DOKŁADNIE jednej z tych ścieżek):
-Mężczyźni > Obuwie > Sneakersy
-Mężczyźni > Obuwie > Trekkingi
-Mężczyźni > Obuwie > Buty do biegania
-Mężczyźni > Obuwie > Obuwie sportowe > Halówki piłkarskie
-Mężczyźni > Obuwie > Obuwie sportowe > Buty do fitnessu
-Mężczyźni > Obuwie > Obuwie sportowe > Buty motocyklowe
-Mężczyźni > Obuwie > Obuwie sportowe > Rolki i wrotki
-Mężczyźni > Obuwie > Sandały i klapki
-Mężczyźni > Obuwie > Mokasyny i lordsy
-Mężczyźni > Obuwie > Kozaki i botki
-Mężczyźni > Obuwie > Półbuty i oksfordy
-Mężczyźni > Obuwie > Kalosze i śniegowce
-Mężczyźni > Obuwie > Kapcie
-Mężczyźni > Ubrania > Kurtki i płaszcze
-Mężczyźni > Ubrania > Bluzy
-Mężczyźni > Ubrania > T-shirty
-Mężczyźni > Ubrania > Spodnie
-Mężczyźni > Ubrania > Swetry i kardigany
-Mężczyźni > Ubrania > Koszule
-Mężczyźni > Ubrania > Dresy
-Mężczyźni > Ubrania > Szorty
-Mężczyźni > Ubrania > Bielizna i skarpety
-Mężczyźni > Akcesoria > Czapki i kapelusze
-Mężczyźni > Akcesoria > Torby i plecaki
-Mężczyźni > Akcesoria > Paski
-Mężczyźni > Akcesoria > Zegarki
-Kobiety > Obuwie > Sneakersy
-Kobiety > Obuwie > Trekkingi
-Kobiety > Obuwie > Buty na obcasie
-Kobiety > Obuwie > Kozaki i botki
-Kobiety > Obuwie > Sandały i klapki
-Kobiety > Obuwie > Baleriny i mokasyny
-Kobiety > Obuwie > Buty sportowe
-Kobiety > Obuwie > Kapcie
-Kobiety > Obuwie > Kalosze i śniegowce
-Kobiety > Ubrania > Sukienki
-Kobiety > Ubrania > Bluzki i koszule
-Kobiety > Ubrania > Kurtki i płaszcze
-Kobiety > Ubrania > Spodnie
-Kobiety > Ubrania > Spódnice
-Kobiety > Ubrania > Swetry i kardigany
-Kobiety > Ubrania > Bluzy
-Kobiety > Ubrania > T-shirty
-Kobiety > Ubrania > Bielizna i piżamy
-Kobiety > Ubrania > Stroje kąpielowe
-Kobiety > Ubrania > Dresy i komplety
-Kobiety > Akcesoria > Torebki
-Kobiety > Akcesoria > Szale i chusty
-Kobiety > Akcesoria > Biżuteria
-Kobiety > Akcesoria > Zegarki
-Kobiety > Akcesoria > Czapki i kapelusze
-Dzieci > Obuwie > Sneakersy
-Dzieci > Obuwie > Sandały
-Dzieci > Obuwie > Buty zimowe
-Dzieci > Obuwie > Kapcie
-Dzieci > Ubrania > Kurtki
-Dzieci > Ubrania > Spodnie
-Dzieci > Ubrania > Bluzy
-Dzieci > Ubrania > T-shirty
-Dzieci > Ubrania > Sukienki i spódniczki
-Dzieci > Akcesoria > Czapki
-
-Zwróć TYLKO JSON (bez markdown):
-{"title":"chwytliwy tytuł max 60 znaków","description":"naturalny opis po polsku uwzględniający WSZYSTKIE wady wymienione przez sprzedawcę, 2-5 zdań","brand":"marka lub ''","category":"DOKŁADNA ścieżka z listy powyżej","color":"jeden kolor po polsku (Biały/Czarny/Czerwony/Niebieski/Zielony/Szary/Brązowy/Żółty/Różowy/Beżowy/Fioletowy/Pomarańczowy/Złoty/Srebrny/Wielokolorowy)","condition":"DOKŁADNIE jedna z: Nowy z metką | Nowy bez metki | Bardzo dobry | Dobry | Zadowalający"}`;
+${categorySection}
+Zwróć TYLKO JSON (bez markdown, bez \`\`\`):
+{"title":"chwytliwy tytuł max 60 znaków","description":"naturalny opis po polsku uwzględniający WSZYSTKIE wady wymienione przez sprzedawcę, 2-5 zdań","brand":"marka lub ''","category":"DOKŁADNA ścieżka z listy powyżej (przepisz słowo w słowo)","color":"jeden kolor po polsku (Biały/Czarny/Czerwony/Niebieski/Zielony/Szary/Brązowy/Żółty/Różowy/Beżowy/Fioletowy/Pomarańczowy/Złoty/Srebrny/Wielokolorowy)","condition":"DOKŁADNIE jedna z: Nowy z metką | Nowy bez metki | Bardzo dobry | Dobry | Zadowalający"}`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
