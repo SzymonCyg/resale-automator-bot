@@ -2181,10 +2181,17 @@ function aiRenderCard(item) {
   card.querySelector(".ai-photos").addEventListener("change", async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const urls = await readFilesAsDataUrls(files);
+    const { urls, failed } = await readFilesAsDataUrls(files);
     item.photos = (item.photos || []).concat(urls);
+    item._photoErrors = failed;
     aiRenderCard(item);
   });
+  card.querySelectorAll(".ai-thumb-del").forEach(btn => btn.addEventListener("click", () => {
+    const idx = Number(btn.dataset.idx);
+    if (!Number.isFinite(idx)) return;
+    item.photos = (item.photos || []).filter((_, i) => i !== idx);
+    aiRenderCard(item);
+  }));
   card.querySelector(".ai-name").addEventListener("input", e => { item.name = e.target.value; });
   card.querySelector(".ai-condition").addEventListener("input", e => { item.condition = e.target.value; });
   card.querySelector(".ai-size-in").addEventListener("input", e => { item.size = e.target.value; });
