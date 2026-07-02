@@ -152,6 +152,14 @@ function ItemsPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-surface-2 text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
+                  <th className="px-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selected.size === filtered.length}
+                      onChange={toggleAll}
+                      className="cursor-pointer"
+                    />
+                  </th>
                   <th className="px-4 py-3">Zdjęcie</th>
                   <th className="px-4 py-3">Tytuł</th>
                   <th className="px-4 py-3">Marka / rozmiar</th>
