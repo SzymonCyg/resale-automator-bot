@@ -2080,9 +2080,12 @@ function aiRenderCard(item) {
     card.dataset.aiId = item.id;
     container.appendChild(card);
   }
-  const thumbs = (item.photos || []).map(u =>
-    `<img src="${aiEscape(u)}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;margin:2px" />`
+  const thumbs = (item.photos || []).map((u, i) =>
+    `<div style="position:relative;display:inline-block;margin:2px"><img src="${aiEscape(u)}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;display:block" /><button type="button" class="ai-thumb-del" data-idx="${i}" title="Usuń" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:0;background:#c0392b;color:#fff;font-size:12px;line-height:16px;cursor:pointer;padding:0">×</button></div>`
   ).join("");
+  const photoErrors = (item._photoErrors && item._photoErrors.length)
+    ? `<div class="muted" style="color:#c0392b;font-size:11px;margin-top:4px">Nie wczytano: ${aiEscape(item._photoErrors.join(", "))} — format nieobsługiwany przez przeglądarkę, zapisz jako JPG/PNG</div>`
+    : "";
   const gen = item.gen;
   const res = item.resolved;
 
