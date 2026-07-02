@@ -1867,19 +1867,34 @@ function aiEscape(s) {
 }
 
 async function readFilesAsDataUrls(files) {
-  const out = [];
+  const out = []; const failed = [];
   for (const f of files) {
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = () => reject(new Error("FileReader"));
-        r.readAsDataURL(f);
-      });
-      out.push(dataUrl);
-    } catch {}
+      let bmp = null;
+      try { bmp = await createImageBitmap(f); }
+      catch {
+        bmp = await new Promise((resolve, reject) => {
+          const u = URL.createObjectURL(f);
+          const im = new Image();
+          im.onload = () => resolve(im);
+          im.onerror = () => { URL.revokeObjectURL(u); reject(new Error("decode")); };
+          im.src = u;
+        });
+      }
+      const w = bmp.width || bmp.naturalWidth, h = bmp.height || bmp.naturalHeight;
+      if (!w || !h) throw new Error("decode");
+      const MAX = 2048;
+      const scale = Math.min(1, MAX / Math.max(w, h));
+      const cw = Math.round(w * scale), ch = Math.round(h * scale);
+      const c = document.createElement("canvas");
+      c.width = cw; c.height = ch;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cw, ch);
+      ctx.drawImage(bmp, 0, 0, cw, ch);
+      out.push(c.toDataURL("image/jpeg", 0.9));
+    } catch { failed.push((f && f.name) || "plik"); }
   }
-  return out;
+  return { urls: out, failed };
 }
 
 function aiFieldWarn(v) {
@@ -2065,9 +2080,12 @@ function aiRenderCard(item) {
     card.dataset.aiId = item.id;
     container.appendChild(card);
   }
-  const thumbs = (item.photos || []).map(u =>
-    `<img src="${aiEscape(u)}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;margin:2px" />`
+  const thumbs = (item.photos || []).map((u, i) =>
+    `<div style="position:relative;display:inline-block;margin:2px"><img src="${aiEscape(u)}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;display:block" /><button type="button" class="ai-thumb-del" data-idx="${i}" title="Usuń" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:0;background:#c0392b;color:#fff;font-size:12px;line-height:16px;cursor:pointer;padding:0">×</button></div>`
   ).join("");
+  const photoErrors = (item._photoErrors && item._photoErrors.length)
+    ? `<div class="muted" style="color:#c0392b;font-size:11px;margin-top:4px">Nie wczytano: ${aiEscape(item._photoErrors.join(", "))} — format nieobsługiwany przez przeglądarkę, zapisz jako JPG/PNG</div>`
+    : "";
   const gen = item.gen;
   const res = item.resolved;
 
@@ -2125,6 +2143,7 @@ function aiRenderCard(item) {
         <label class="muted">Zdjęcia</label>
         <input class="ai-photos" type="file" accept="image/*" multiple />
         <div class="ai-thumbs" style="display:flex;flex-wrap:wrap;margin-top:4px">${thumbs}</div>
+        ${photoErrors}
       </div>
       <div style="flex:2;min-width:260px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div style="grid-column:1/-1">
@@ -2162,10 +2181,17 @@ function aiRenderCard(item) {
   card.querySelector(".ai-photos").addEventListener("change", async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const urls = await readFilesAsDataUrls(files);
+    const { urls, failed } = await readFilesAsDataUrls(files);
     item.photos = (item.photos || []).concat(urls);
+    item._photoErrors = failed;
     aiRenderCard(item);
   });
+  card.querySelectorAll(".ai-thumb-del").forEach(btn => btn.addEventListener("click", () => {
+    const idx = Number(btn.dataset.idx);
+    if (!Number.isFinite(idx)) return;
+    item.photos = (item.photos || []).filter((_, i) => i !== idx);
+    aiRenderCard(item);
+  }));
   card.querySelector(".ai-name").addEventListener("input", e => { item.name = e.target.value; });
   card.querySelector(".ai-condition").addEventListener("input", e => { item.condition = e.target.value; });
   card.querySelector(".ai-size-in").addEventListener("input", e => { item.size = e.target.value; });

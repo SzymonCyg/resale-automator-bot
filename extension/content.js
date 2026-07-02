@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.22";
+  const CONTENT_VERSION = "1.0.23";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -981,20 +981,22 @@
           const q = String(msg.query || "").trim();
           if (q.length < 2) { sendResponse({ ok: true, brands: [], diag: { skip: true } }); return; }
           const enc = encodeURIComponent(q);
+          const nq = norm(q);
           const tried = [];
           let brands = [];
           const paths = [
-            `/api/v2/brands?search_text=${enc}`,
-            `/api/v2/brands?keyword=${enc}`,
             `/api/v2/item_upload/brands?keyword=${enc}`,
+            `/api/v2/brands?keyword=${enc}`,
+            `/api/v2/brands?search_text=${enc}`,
           ];
           for (const path of paths) {
             const label = path.split("?")[0] + (path.includes("search_text") ? "?search_text" : "?keyword");
             try {
               const r = await vintedApi(path);
               const arr = (r && (r.brands || r.dtos)) || (Array.isArray(r) ? r : []);
-              tried.push({ p: label, keys: r ? Object.keys(r).slice(0, 8) : [], count: (arr || []).length });
-              if (arr && arr.length) { brands = arr; break; }
+              const match = (arr || []).filter(b => b && norm(b.title).includes(nq));
+              tried.push({ p: label, raw: (arr || []).length, match: match.length });
+              if (match.length) { brands = match; break; }
             } catch (e) {
               tried.push({ p: label, err: String(e && e.message || e).slice(0, 80) });
             }
