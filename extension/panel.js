@@ -286,14 +286,6 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
       try {
         const rl = await vintedMsg(tab.id, { kind: "RESOLVE_LABELS_V2", catalog_id: detail.catalog_id, size_id: detail.size_id });
         resolved = rl || null;
-        if (i === 0) {
-          try {
-            const el = document.getElementById("exportDebug");
-            if (el) el.textContent = "RESOLVE diag: " + JSON.stringify(rl?.diag || rl, null, 1);
-            console.log("VM_RESOLVE_DIAG", rl);
-            console.log("VM_DETAIL_DIAG", detail);
-          } catch(e) {}
-        }
       } catch (e) { console.warn("resolve failed", it.id, e); }
       let labels = null;
       try {
@@ -1434,10 +1426,13 @@ async function runImport(mode) {
 
   for (let i = 0; i < target.length; i++) {
     const it = target[i];
-    if (i > 0 && target.length > 1) {
+    if (mode === "publish" && i > 0 && target.length > 1) {
       const wait = Math.floor(dMin + Math.random() * (dMax - dMin + 1));
       importLog(`⏳ Czekam ${wait}s…`);
       await new Promise(r => setTimeout(r, wait * 1000));
+    } else if (mode === "draft" && (i + 1) % 10 === 0 && i < target.length - 1) {
+      importLog("⏳ Pauza 10 s (co 10 ogłoszeń)");
+      await new Promise(r => setTimeout(r, 10000));
     }
     importLog(`(${i+1}/${target.length}) ${it.title}`);
     try {
