@@ -2466,7 +2466,7 @@ async function aiRun(mode) {
         size_id: r.size_id,
         status_id: r.status_id,
         catalog_id: r.catalog_id,
-        color_ids: r.color_id ? [r.color_id] : [],
+        color_ids: [r.color_id, r.color_id2].filter(id => id != null && id > 0),
         package_size_id: r.package_size_id,
         is_unisex: false,
       };
