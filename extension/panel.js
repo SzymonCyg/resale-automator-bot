@@ -1738,9 +1738,11 @@ function aiBrandPickerHtml(item) {
   const res = item.resolved || {};
   const val = res.brand_title || "";
   return `
-    <div class="ai-brand-picker">
-      <input class="ai-brand" list="aiBrandList" type="text" value="${aiEscape(val)}" placeholder="wpisz markę, np. Sprandi" style="width:100%" />
-      ${aiFieldWarn(res.brand_id)}
+    <div class="ai-brand-picker" style="position:relative">
+      <input class="ai-brand" type="text" value="${aiEscape(val)}" placeholder="wpisz markę, np. Sprandi" style="width:100%" autocomplete="off" />
+      <span class="ai-brand-diag muted" style="font-size:11px"></span>
+      <div class="ai-brand-results" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;background:var(--s2,#1c1c1c);color:var(--fg,#eee);border:1px solid var(--bd,#333);border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.3)"></div>
+      <div class="ai-brand-warn">${aiFieldWarn(res.brand_id)}</div>
     </div>`;
 }
 
