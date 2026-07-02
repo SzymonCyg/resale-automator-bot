@@ -393,11 +393,21 @@
   async function loadCatalogAttributes(catalogId) {
     if (vmCatalogAttrCache[catalogId]) return vmCatalogAttrCache[catalogId];
     try {
-      const r = await vintedApi(`/api/v2/item_upload/attributes?catalog_id=${catalogId}`);
+      const r = await vintedApi("/api/v2/item_upload/attributes", {
+        method: "POST",
+        headers: {
+          "accept-features": "ALL",
+          "x-enable-dynamic-attribute-condition": "true",
+          "x-enable-dynamic-attribute-size": "true",
+          "x-enable-dynamic-attribute-video-game-rating": "true",
+        },
+        body: JSON.stringify({ attributes: [{ code: "category", value: [Number(catalogId)] }] }),
+      });
       vmCatalogAttrCache[catalogId] = r?.attributes || r?.dtos || [];
     } catch { vmCatalogAttrCache[catalogId] = []; }
     return vmCatalogAttrCache[catalogId];
   }
+
 
   function collectIdTitle(node, acc) {
     if (!node) return acc;
