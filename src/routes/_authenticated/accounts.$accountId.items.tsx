@@ -4,10 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { getAccount, listItems } from "@/lib/vinted.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileCode2, FileDown, FileSpreadsheet, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { FileCode2, FileDown, FileSpreadsheet, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { exportToCSV, exportToExcel, exportToXML } from "@/lib/export";
 import { AccountHeader } from "@/components/account-header";
+import { vintedProxy } from "@/lib/vintedProxy";
 
 export const Route = createFileRoute("/_authenticated/accounts/$accountId/items")({
   head: () => ({ meta: [{ title: "Przedmioty — Vinted Manager" }] }),
@@ -22,17 +23,45 @@ function ItemsPage() {
   const itemsQ = useQuery({ queryKey: ["items", accountId], queryFn: () => list({ data: { accountId } }) });
 
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
   const filtered = useMemo(() => {
     if (!itemsQ.data) return [];
-    if (!q.trim()) return itemsQ.data;
-    const s = q.toLowerCase();
-    return itemsQ.data.filter(
-      (i) =>
-        i.title?.toLowerCase().includes(s) ||
-        i.brand?.toLowerCase().includes(s) ||
-        i.vinted_item_id.includes(s),
-    );
-  }, [itemsQ.data, q]);
+    let rows = itemsQ.data;
+    if (q.trim()) {
+      const s = q.toLowerCase();
+      rows = rows.filter(
+        (i) =>
+          i.title?.toLowerCase().includes(s) ||
+          i.brand?.toLowerCase().includes(s) ||
+          i.vinted_item_id.includes(s),
+      );
+    }
+    if (statusFilter === "active")
+      rows = rows.filter((i) => i.status === "active" || i.status === "visible");
+    if (statusFilter === "inactive")
+      rows = rows.filter((i) => i.status !== "active" && i.status !== "visible");
+    return rows;
+  }, [itemsQ.data, q, statusFilter]);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [q, statusFilter]);
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map((i) => i.vinted_item_id)));
+  }
 
   const account = accountQ.data;
   const base = account?.label ?? "items";
@@ -42,16 +71,59 @@ function ItemsPage() {
       <AccountHeader account={account} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Szukaj po tytule, marce, ID..."
-            className="pl-9"
-          />
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative max-w-sm flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Szukaj po tytule, marce, ID..."
+              className="pl-9"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+            className="rounded-md border border-border bg-background px-3 py-2 text-sm"
+          >
+            <option value="all">Wszystkie statusy</option>
+            <option value="active">Aktywne</option>
+            <option value="inactive">Nieaktywne</option>
+          </select>
         </div>
         <div className="flex flex-wrap gap-2">
+          {selected.size > 0 && (
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={async () => {
+                if (!confirm(`Usunąć ${selected.size} przedmiot(ów) z Vinted? Tej akcji nie można cofnąć.`)) return;
+                setDeleting(true);
+                let ok = 0, err = 0;
+                for (const vintedId of [...selected]) {
+                  try {
+                    await vintedProxy({
+                      method: "DELETE",
+                      path: `/api/v2/items/${vintedId}`,
+                      domain: (account as { country?: string } | undefined)?.country,
+                    });
+                    ok++;
+                  } catch (e) {
+                    console.warn("Delete failed", vintedId, e);
+                    err++;
+                  }
+                  await new Promise((r) => setTimeout(r, 800));
+                }
+                setSelected(new Set());
+                setDeleting(false);
+                itemsQ.refetch();
+                alert(`Usunięto: ${ok}${err ? `, błędy: ${err}` : ""}`);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {deleting ? "Usuwam..." : `Usuń zaznaczone (${selected.size})`}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => exportToCSV(filtered, `vinted-${base}.csv`)} disabled={!filtered.length}>
             <FileDown className="mr-2 h-4 w-4" /> CSV
           </Button>
@@ -80,6 +152,14 @@ function ItemsPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-surface-2 text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
+                  <th className="px-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selected.size === filtered.length}
+                      onChange={toggleAll}
+                      className="cursor-pointer"
+                    />
+                  </th>
                   <th className="px-4 py-3">Zdjęcie</th>
                   <th className="px-4 py-3">Tytuł</th>
                   <th className="px-4 py-3">Marka / rozmiar</th>
@@ -92,6 +172,14 @@ function ItemsPage() {
               <tbody className="divide-y divide-border">
                 {filtered.map((it) => (
                   <tr key={it.id} className="hover:bg-surface-2">
+                    <td className="px-4 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(it.vinted_item_id)}
+                        onChange={() => toggleOne(it.vinted_item_id)}
+                        className="cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-2">
                       {it.photo_url ? (
                         <img src={it.photo_url} alt="" className="h-12 w-12 rounded object-cover" loading="lazy" />
