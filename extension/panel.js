@@ -1842,9 +1842,8 @@ function aiRenderCard(item) {
         <textarea class="ai-desc" rows="4" style="width:100%">${aiEscape(gen.description)}</textarea>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:12px">
           <div style="grid-column:1/-1">
-            <label class="muted">Kategoria (wpisz, aby wyszukać)</label>
-            <input class="ai-cat" list="aiCatList" type="text" value="${aiEscape(catValue)}" style="width:100%" placeholder="np. Mężczyźni > Obuwie > Sneakersy" />
-            ${aiFieldWarn(res?.catalog_id)}
+            <label class="muted">Kategoria</label>
+            ${aiCatButtonsHtml(item)}
           </div>
           <div>
             <label class="muted">Rozmiar</label>
