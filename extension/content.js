@@ -958,6 +958,25 @@
           };
           sendResponse({ ok: true, resolved, diag });
         }
+        else if (msg.kind === "GET_CATALOG_LEAVES_V2") {
+          const tree = await loadCatalogTree();
+          const all = collectCatalogNodesWithParents(tree, [], []);
+          const leaves = [];
+          for (const { node, parents } of all) {
+            const kids = node.catalogs || node.children || node.catalog;
+            const hasKids = Array.isArray(kids) ? kids.length > 0 : !!kids;
+            if (hasKids) continue;
+            const titles = [...parents.map(p => String(p.title || "")), String(node.title || "")].filter(Boolean);
+            leaves.push({ id: Number(node.id), title: String(node.title || ""), path: titles.join(" > ") });
+          }
+          sendResponse({ ok: true, leaves });
+        }
+        else if (msg.kind === "GET_CATALOG_SIZES_V2") {
+          const attrs = await loadCatalogAttributes(msg.catalog_id);
+          const sizeAttr = (attrs || []).find(a => a && a.code === "size");
+          const sizes = sizeAttr ? collectIdTitle(sizeAttr, []).map(s => ({ id: Number(s.id), title: String(s.title) })) : [];
+          sendResponse({ ok: true, sizes });
+        }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
         else if (msg.kind === "PUBLISH_DRAFT_V2") sendResponse({ ok: true, ...(await publishExistingDraft(msg.id)) });
