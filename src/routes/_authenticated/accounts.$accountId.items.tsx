@@ -267,6 +267,47 @@ function ItemsPage() {
       <p className="text-xs text-muted-foreground">
         Pokazano {filtered.length} z {itemsQ.data?.length ?? 0} przedmiotów.
       </p>
+
+      <div className="surface-card">
+        <button
+          onClick={() => setShowLogs((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium"
+        >
+          <span>Log akcji {logsQ.data?.length ? `(${logsQ.data.length})` : ""}</span>
+          <span className="text-xs text-muted-foreground">{showLogs ? "Ukryj" : "Pokaż"}</span>
+        </button>
+        {showLogs && (
+          <div className="border-t border-border">
+            {logsQ.isLoading ? (
+              <div className="p-4 text-sm text-muted-foreground">Wczytywanie...</div>
+            ) : !logsQ.data?.length ? (
+              <div className="p-4 text-sm text-muted-foreground">Brak wpisów.</div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {logsQ.data.slice(0, 20).map((l) => (
+                  <li key={l.id} className="flex items-start gap-3 px-4 py-2 text-sm">
+                    <span
+                      className={`mt-0.5 rounded-full px-2 py-0.5 text-[10px] uppercase ${
+                        l.status === "ok"
+                          ? "bg-emerald-500/10 text-emerald-600"
+                          : l.status === "error"
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-muted"
+                      }`}
+                    >
+                      {l.type}
+                    </span>
+                    <span className="flex-1">{l.message}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(l.created_at).toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
