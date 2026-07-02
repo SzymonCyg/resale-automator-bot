@@ -2219,53 +2219,6 @@ function aiRenderCard(item) {
     aiRenderCard(item);
   });
 
-  const brandInput = card.querySelector(".ai-brand-input");
-  const brandSearch = card.querySelector(".ai-brand-search");
-  const brandResults = card.querySelector(".ai-brand-results");
-  const brandSelected = card.querySelector(".ai-brand-selected");
-
-  async function searchBrand(query) {
-    if (!query.trim()) return;
-    brandSearch.disabled = true;
-    brandSearch.textContent = "…";
-    try {
-      const tab = await getVintedTab();
-      if (!tab) return;
-      const r = await vintedMsg(tab.id, {
-        kind: "RESOLVE_AI_ATTRS_V2",
-        brand: query, category: "", color: "", condition: "", size: "", packageSize: ""
-      });
-      if (r?.resolved?.brand_id) {
-        const b = { id: r.resolved.brand_id, title: r.resolved.brand_title };
-        brandResults.style.display = "block";
-        brandResults.innerHTML = `<div class="ai-brand-opt" data-id="${b.id}" data-title="${aiEscape(b.title)}" style="padding:6px 10px;cursor:pointer;font-size:13px">${aiEscape(b.title)}</div>`;
-      } else {
-        brandResults.style.display = "block";
-        brandResults.innerHTML = `<div style="padding:6px;color:#c47b00;font-size:12px">Nie znaleziono — spróbuj innej nazwy</div>`;
-      }
-      brandResults.querySelectorAll(".ai-brand-opt").forEach(opt => {
-        opt.addEventListener("mouseenter", () => opt.style.background = "var(--s2)");
-        opt.addEventListener("mouseleave", () => opt.style.background = "");
-        opt.addEventListener("click", () => {
-          item.resolved = item.resolved || {};
-          item.resolved.brand_id = Number(opt.dataset.id);
-          item.resolved.brand_title = opt.dataset.title;
-          brandSelected.innerHTML = `✓ <b>${aiEscape(opt.dataset.title)}</b> (ID: ${opt.dataset.id})`;
-          brandResults.style.display = "none";
-          brandInput.value = opt.dataset.title;
-        });
-      });
-    } catch (e) {
-      brandResults.innerHTML = `<div style="padding:6px;font-size:12px;color:red">${aiEscape(e.message)}</div>`;
-      brandResults.style.display = "block";
-    } finally {
-      brandSearch.disabled = false;
-      brandSearch.textContent = "🔍 Szukaj";
-    }
-  }
-
-  if (brandSearch) brandSearch.addEventListener("click", () => searchBrand(brandInput.value));
-  if (brandInput) brandInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); searchBrand(brandInput.value); } });
   const sizeEl = card.querySelector(".ai-size");
   if (sizeEl && res?.catalog_id) sizeEl.addEventListener("change", e => {
     const id = Number(e.target.value) || null;
@@ -2275,6 +2228,66 @@ function aiRenderCard(item) {
     const hit = sizes.find(s => Number(s.id) === id);
     item.resolved.size_title = hit ? hit.title : "";
   });
+
+  // Brand picker events
+  const brandSearchInput = card.querySelector(".ai-brand-search-input");
+  if (brandSearchInput) {
+    brandSearchInput.addEventListener("input", e => {
+      item._brandSearch = e.target.value;
+      aiRenderCard(item);
+    });
+  }
+  card.querySelectorAll(".ai-brand-opt").forEach(btn => btn.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    item.resolved.brand_id = Number(btn.dataset.bid);
+    item.resolved.brand_title = btn.dataset.bname;
+    item._brandSearch = "";
+    aiRenderCard(item);
+  }));
+  const brandClear = card.querySelector(".ai-brand-clear");
+  if (brandClear) brandClear.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    item.resolved.brand_id = null;
+    item.resolved.brand_title = "";
+    item._brandSearch = "";
+    aiRenderCard(item);
+  });
+
+  // Color picker events
+  card.querySelectorAll(".ai-color-btn").forEach(btn => btn.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    const cid = Number(btn.dataset.cid);
+    const cname = btn.dataset.cname;
+    if (item.resolved.color_id === cid) {
+      item.resolved.color_id = item.resolved.color_id2 || null;
+      item.resolved.color_title = item.resolved.color_title2 || "";
+      item.resolved.color_id2 = null;
+      item.resolved.color_title2 = "";
+    } else if (item.resolved.color_id2 === cid) {
+      item.resolved.color_id2 = null;
+      item.resolved.color_title2 = "";
+    } else if (!item.resolved.color_id) {
+      item.resolved.color_id = cid;
+      item.resolved.color_title = cname;
+    } else if (!item.resolved.color_id2) {
+      item.resolved.color_id2 = cid;
+      item.resolved.color_title2 = cname;
+    }
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-color-clear").forEach(btn => btn.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    if (btn.dataset.cn === "1") {
+      item.resolved.color_id = item.resolved.color_id2 || null;
+      item.resolved.color_title = item.resolved.color_title2 || "";
+      item.resolved.color_id2 = null;
+      item.resolved.color_title2 = "";
+    } else {
+      item.resolved.color_id2 = null;
+      item.resolved.color_title2 = "";
+    }
+    aiRenderCard(item);
+  }));
 }
 
 
