@@ -96,7 +96,7 @@ export const createTask = createServerFn({ method: "POST" })
       account_id: data.accountId,
       user_id: context.userId,
       type: data.type,
-      payload: data.payload,
+      payload: data.payload as never,
       scheduled_for: data.scheduledFor || new Date().toISOString(),
       status: "pending",
     }).select().single();
