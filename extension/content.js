@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.15";
+  const CONTENT_VERSION = "1.0.16";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -393,11 +393,21 @@
   async function loadCatalogAttributes(catalogId) {
     if (vmCatalogAttrCache[catalogId]) return vmCatalogAttrCache[catalogId];
     try {
-      const r = await vintedApi(`/api/v2/item_upload/attributes?catalog_id=${catalogId}`);
+      const r = await vintedApi("/api/v2/item_upload/attributes", {
+        method: "POST",
+        headers: {
+          "accept-features": "ALL",
+          "x-enable-dynamic-attribute-condition": "true",
+          "x-enable-dynamic-attribute-size": "true",
+          "x-enable-dynamic-attribute-video-game-rating": "true",
+        },
+        body: JSON.stringify({ attributes: [{ code: "category", value: [Number(catalogId)] }] }),
+      });
       vmCatalogAttrCache[catalogId] = r?.attributes || r?.dtos || [];
     } catch { vmCatalogAttrCache[catalogId] = []; }
     return vmCatalogAttrCache[catalogId];
   }
+
 
   function collectIdTitle(node, acc) {
     if (!node) return acc;
