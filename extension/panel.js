@@ -1698,21 +1698,43 @@ function aiFieldWarn(v) {
   return (v == null || v === "" ) ? `<div class="muted" style="color:#c47b00">⚠ nie rozpoznano — popraw nazwę/rozmiar i wygeneruj ponownie</div>` : "";
 }
 
+async function aiCompressPhoto(dataUrl, maxSide = 2000, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxSide || h > maxSide) {
+        const ratio = Math.min(maxSide / w, maxSide / h);
+        w = Math.round(w * ratio); h = Math.round(h * ratio);
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => reject(new Error("decode fail"));
+    img.src = dataUrl;
+  });
+}
+
 const AI_CATEGORY_TREE = {
   "Mężczyźni": {
-    "Obuwie": ["Sneakersy","Trekkingi","Buty do biegania","Sandały i klapki","Mokasyny i lordsy","Kozaki i botki","Półbuty i oksfordy","Kalosze i śniegowce","Kapcie","Obuwie sportowe > Halówki piłkarskie","Obuwie sportowe > Buty do fitnessu","Obuwie sportowe > Buty motocyklowe","Obuwie sportowe > Rolki i wrotki"],
-    "Ubrania": ["Kurtki i płaszcze","Bluzy","T-shirty","Spodnie","Swetry i kardigany","Koszule","Dresy","Szorty","Bielizna i skarpety"],
-    "Akcesoria": ["Czapki i kapelusze","Torby i plecaki","Paski","Zegarki"]
+    "Obuwie": {
+      "__items": ["Sneakersy","Trekkingi","Buty do biegania","Sandały i klapki","Mokasyny i lordsy","Kozaki i botki","Półbuty i oksfordy","Kalosze i śniegowce","Kapcie"],
+      "Obuwie sportowe": ["Halówki piłkarskie","Buty do fitnessu","Buty motocyklowe","Rolki i wrotki"]
+    },
+    "Ubrania": { "__items": ["Kurtki i płaszcze","Bluzy","T-shirty","Spodnie","Swetry i kardigany","Koszule","Dresy","Szorty","Bielizna i skarpety"] },
+    "Akcesoria": { "__items": ["Czapki i kapelusze","Torby i plecaki","Paski","Zegarki"] }
   },
   "Kobiety": {
-    "Obuwie": ["Sneakersy","Trekkingi","Buty na obcasie","Kozaki i botki","Sandały i klapki","Baleriny i mokasyny","Buty sportowe","Kapcie","Kalosze i śniegowce"],
-    "Ubrania": ["Sukienki","Bluzki i koszule","Kurtki i płaszcze","Spodnie","Spódnice","Swetry i kardigany","Bluzy","T-shirty","Bielizna i piżamy","Stroje kąpielowe","Dresy i komplety"],
-    "Akcesoria": ["Torebki","Szale i chusty","Biżuteria","Zegarki","Czapki i kapelusze"]
+    "Obuwie": { "__items": ["Sneakersy","Trekkingi","Buty na obcasie","Kozaki i botki","Sandały i klapki","Baleriny i mokasyny","Buty sportowe","Kapcie","Kalosze i śniegowce"] },
+    "Ubrania": { "__items": ["Sukienki","Bluzki i koszule","Kurtki i płaszcze","Spodnie","Spódnice","Swetry i kardigany","Bluzy","T-shirty","Bielizna i piżamy","Stroje kąpielowe","Dresy i komplety"] },
+    "Akcesoria": { "__items": ["Torebki","Szale i chusty","Biżuteria","Zegarki","Czapki i kapelusze"] }
   },
   "Dzieci": {
-    "Obuwie": ["Sneakersy","Sandały","Buty zimowe","Kapcie"],
-    "Ubrania": ["Kurtki","Spodnie","Bluzy","T-shirty","Sukienki i spódniczki"],
-    "Akcesoria": ["Czapki"]
+    "Obuwie": { "__items": ["Sneakersy","Sandały","Buty zimowe","Kapcie"] },
+    "Ubrania": { "__items": ["Kurtki","Spodnie","Bluzy","T-shirty","Sukienki i spódniczki"] },
+    "Akcesoria": { "__items": ["Czapki"] }
   }
 };
 
