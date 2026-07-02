@@ -2288,7 +2288,20 @@ async function aiRun(mode) {
         package_size_id: r.package_size_id,
         is_unisex: false,
       };
-      const resp = await vintedMsg(tab.id, { kind: "CREATE_LISTING_V2", attributes, photos: it.photos, mode });
+      const compressedPhotos = [];
+      for (const dataUrl of it.photos) {
+        try {
+          const compressed = await aiCompressPhoto(dataUrl);
+          compressedPhotos.push(compressed);
+        } catch (e) {
+          aiLog(`  · pominięto zdjęcie: ${e.message}`, "warn");
+        }
+      }
+      if (!compressedPhotos.length) {
+        aiLog(`  ✗ brak zdjęć do wgrania`, "err");
+        continue;
+      }
+      const resp = await vintedMsg(tab.id, { kind: "CREATE_LISTING_V2", attributes, photos: compressedPhotos, mode });
       if (resp?.ok) {
         aiLog(`  ✓ ${mode === "publish" ? "opublikowano" : "zapisano jako draft"} (ID ${resp.id})`, "ok");
       } else {
