@@ -1767,53 +1767,85 @@ async function aiApplyCatPath(item, path) {
 }
 
 function aiCatButtonsHtml(item) {
-  const cat = item.aiCat || { gender: "", section: "" };
-  // seed from current resolved path if aiCat empty
+  const cat = item.aiCat || { gender: "", section: "", subsection: "" };
+
   if (!cat.gender && item.resolved?.catalog_id) {
     const leaf = aiCatalogLeaves.find(l => l.id === Number(item.resolved.catalog_id));
     if (leaf?.path) {
-      const p = aiParsePathToCat(leaf.path);
-      if (AI_CATEGORY_TREE[p.gender]) { cat.gender = p.gender; if (AI_CATEGORY_TREE[p.gender][p.section]) cat.section = p.section; }
+      const parts = leaf.path.split(">").map(s => s.trim());
+      cat.gender = parts[0] || "";
+      cat.section = parts[1] || "";
+      cat.subsection = parts.length > 3 ? parts[2] : "";
       item.aiCat = cat;
     }
   }
+
   const currentPath = item.resolved?.catalog_id
     ? (aiCatalogLeaves.find(l => l.id === Number(item.resolved.catalog_id))?.path || item.resolved.catalog_title || "")
     : "";
+
   const tagBtn = currentPath
-    ? `<div style="margin-bottom:6px"><span style="display:inline-flex;align-items:center;gap:6px;background:#dcfce7;color:#166534;padding:4px 8px;border-radius:12px;font-size:12px">${aiEscape(currentPath)} <button type="button" class="ai-cat-clear" style="background:transparent;border:0;color:#166534;cursor:pointer;font-weight:bold">×</button></span></div>`
+    ? `<div style="margin-bottom:6px"><span style="display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--p) 15%,var(--s2));color:var(--p);padding:4px 8px;border-radius:12px;font-size:12px">${aiEscape(currentPath)} <button type="button" class="ai-cat-clear" style="background:transparent;border:0;color:var(--p);cursor:pointer;font-weight:bold">×</button></span></div>`
     : "";
-  const genderBtns = Object.keys(AI_CATEGORY_TREE).map(g =>
+
+  let breadParts = [];
+  if (cat.gender) breadParts.push({ label: cat.gender, lvl: 1 });
+  if (cat.section) breadParts.push({ label: cat.section, lvl: 2 });
+  if (cat.subsection) breadParts.push({ label: cat.subsection, lvl: 3 });
+  const breadcrumb = breadParts.length
+    ? `<div class="muted" style="font-size:11px;margin-bottom:4px">
+        <a href="#" class="ai-cat-crumb" data-lvl="0" style="color:inherit;text-decoration:underline">wszystkie</a>
+        ${breadParts.map(p => ` › <a href="#" class="ai-cat-crumb" data-lvl="${p.lvl}" style="color:inherit;text-decoration:underline">${aiEscape(p.label)}</a>`).join("")}
+      </div>`
+    : "";
+
+  const genderBtns = `<div>${Object.keys(AI_CATEGORY_TREE).map(g =>
     `<button type="button" class="btn ai-cat-gender${cat.gender===g?" primary":""}" data-g="${aiEscape(g)}" style="margin:2px">${aiEscape(g)}</button>`
-  ).join("");
+  ).join("")}</div>`;
+
   let sectionRow = "";
-  let subRow = "";
   if (cat.gender && AI_CATEGORY_TREE[cat.gender]) {
     const sections = Object.keys(AI_CATEGORY_TREE[cat.gender]);
     sectionRow = `<div style="margin-top:6px">${sections.map(s =>
       `<button type="button" class="btn ai-cat-section${cat.section===s?" primary":""}" data-s="${aiEscape(s)}" style="margin:2px">${aiEscape(s)}</button>`
     ).join("")}</div>`;
-    if (cat.section && AI_CATEGORY_TREE[cat.gender][cat.section]) {
-      const subs = AI_CATEGORY_TREE[cat.gender][cat.section];
-      subRow = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${subs.map(sub => {
+  }
+
+  let subgroupRow = "";
+  let subRow = "";
+  if (cat.gender && cat.section && AI_CATEGORY_TREE[cat.gender]?.[cat.section]) {
+    const sectionData = AI_CATEGORY_TREE[cat.gender][cat.section];
+    const directItems = sectionData["__items"] || [];
+    const subgroups = Object.keys(sectionData).filter(k => k !== "__items");
+
+    if (subgroups.length) {
+      subgroupRow = `<div style="margin-top:6px">${subgroups.map(sg =>
+        `<button type="button" class="btn ai-cat-subgroup${cat.subsection===sg?" primary":""}" data-sg="${aiEscape(sg)}" style="margin:2px;font-size:12px;background:color-mix(in srgb,var(--p) 8%,var(--s2))">${aiEscape(sg)}</button>`
+      ).join("")}</div>`;
+    }
+
+    if (cat.subsection && sectionData[cat.subsection]) {
+      const subItems = sectionData[cat.subsection];
+      subRow = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${subItems.map(sub => {
+        const fullPath = `${cat.gender} > ${cat.section} > ${cat.subsection} > ${sub}`;
+        const active = currentPath === fullPath;
+        return `<button type="button" class="btn ai-cat-sub${active?" primary":""}" data-sub="${aiEscape(sub)}" data-full="${aiEscape(fullPath)}" style="margin:2px;font-size:12px">${aiEscape(sub)}</button>`;
+      }).join("")}</div>`;
+    } else if (directItems.length) {
+      subRow = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${directItems.map(sub => {
         const fullPath = `${cat.gender} > ${cat.section} > ${sub}`;
         const active = currentPath === fullPath;
-        return `<button type="button" class="btn ai-cat-sub${active?" primary":""}" data-sub="${aiEscape(sub)}" style="margin:2px;font-size:12px">${aiEscape(sub)}</button>`;
+        return `<button type="button" class="btn ai-cat-sub${active?" primary":""}" data-sub="${aiEscape(sub)}" data-full="${aiEscape(fullPath)}" style="margin:2px;font-size:12px">${aiEscape(sub)}</button>`;
       }).join("")}</div>`;
     }
   }
-  const breadcrumb = (cat.gender || cat.section)
-    ? `<div class="muted" style="font-size:11px;margin-bottom:4px">
-         <a href="#" class="ai-cat-crumb" data-lvl="0" style="color:inherit;text-decoration:underline">wszystkie</a>
-         ${cat.gender?` › <a href="#" class="ai-cat-crumb" data-lvl="1" style="color:inherit;text-decoration:underline">${aiEscape(cat.gender)}</a>`:""}
-         ${cat.section?` › <a href="#" class="ai-cat-crumb" data-lvl="2" style="color:inherit;text-decoration:underline">${aiEscape(cat.section)}</a>`:""}
-       </div>`
-    : "";
+
   return `
     ${tagBtn}
     ${breadcrumb}
-    <div>${genderBtns}</div>
+    ${genderBtns}
     ${sectionRow}
+    ${subgroupRow}
     ${subRow}
     <label class="muted" style="margin-top:8px;display:block;font-size:11px">lub wpisz ręcznie</label>
     <input class="ai-cat" list="aiCatList" type="text" value="${aiEscape(currentPath)}" style="width:100%" placeholder="np. Mężczyźni > Obuwie > Trekkingi" />
