@@ -931,6 +931,28 @@
           };
           sendResponse({ ok: true, size, category, diag });
         }
+        else if (msg.kind === "RESOLVE_AI_ATTRS_V2") {
+          const cat = await resolveCatalogIdByName(msg.category);
+          const catalog_id = cat?.id || null;
+          const sz = await resolveSizeIdByName(catalog_id, msg.size);
+          const br = await resolveBrandId(msg.brand);
+          const col = await resolveColorId(msg.color);
+          const status_id = STATUS_LABEL_TO_ID[norm(msg.condition)] || null;
+          const package_size_id = await resolvePackageSizeId(catalog_id, msg.packageSize);
+          const resolved = {
+            catalog_id, catalog_title: cat?.title || "",
+            size_id: sz?.id || null, size_title: sz?.title || "",
+            brand_id: br?.id || null, brand_title: br?.title || "",
+            color_id: col?.id || null, color_title: col?.title || "",
+            status_id, status_label: msg.condition || "",
+            package_size_id,
+          };
+          const diag = {
+            catFound: !!cat, sizeFound: !!sz, brandFound: !!br,
+            colorFound: !!col, statusFound: !!status_id, pkg: package_size_id,
+          };
+          sendResponse({ ok: true, resolved, diag });
+        }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
         else if (msg.kind === "PUBLISH_DRAFT_V2") sendResponse({ ok: true, ...(await publishExistingDraft(msg.id)) });
