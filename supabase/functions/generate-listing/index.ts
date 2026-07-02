@@ -10,7 +10,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { name, condition, size, price, packageSize } = await req.json();
+    const { name, condition, size, price, packageSize, categoryLeaves } = await req.json();
 
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!anthropicApiKey) {
