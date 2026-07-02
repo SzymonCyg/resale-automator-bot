@@ -1698,6 +1698,108 @@ function aiFieldWarn(v) {
   return (v == null || v === "" ) ? `<div class="muted" style="color:#c47b00">⚠ nie rozpoznano — popraw nazwę/rozmiar i wygeneruj ponownie</div>` : "";
 }
 
+const AI_CATEGORY_TREE = {
+  "Mężczyźni": {
+    "Obuwie": ["Sneakersy","Trekkingi","Buty do biegania","Sandały i klapki","Mokasyny i lordsy","Kozaki i botki","Półbuty i oksfordy","Kalosze i śniegowce","Kapcie","Obuwie sportowe > Halówki piłkarskie","Obuwie sportowe > Buty do fitnessu","Obuwie sportowe > Buty motocyklowe","Obuwie sportowe > Rolki i wrotki"],
+    "Ubrania": ["Kurtki i płaszcze","Bluzy","T-shirty","Spodnie","Swetry i kardigany","Koszule","Dresy","Szorty","Bielizna i skarpety"],
+    "Akcesoria": ["Czapki i kapelusze","Torby i plecaki","Paski","Zegarki"]
+  },
+  "Kobiety": {
+    "Obuwie": ["Sneakersy","Trekkingi","Buty na obcasie","Kozaki i botki","Sandały i klapki","Baleriny i mokasyny","Buty sportowe","Kapcie","Kalosze i śniegowce"],
+    "Ubrania": ["Sukienki","Bluzki i koszule","Kurtki i płaszcze","Spodnie","Spódnice","Swetry i kardigany","Bluzy","T-shirty","Bielizna i piżamy","Stroje kąpielowe","Dresy i komplety"],
+    "Akcesoria": ["Torebki","Szale i chusty","Biżuteria","Zegarki","Czapki i kapelusze"]
+  },
+  "Dzieci": {
+    "Obuwie": ["Sneakersy","Sandały","Buty zimowe","Kapcie"],
+    "Ubrania": ["Kurtki","Spodnie","Bluzy","T-shirty","Sukienki i spódniczki"],
+    "Akcesoria": ["Czapki"]
+  }
+};
+
+function aiParsePathToCat(path) {
+  if (!path) return { gender: "", section: "", sub: "" };
+  const parts = String(path).split(">").map(s => s.trim());
+  const gender = parts[0] || "";
+  const section = parts[1] || "";
+  const sub = parts.slice(2).join(" > ");
+  return { gender, section, sub };
+}
+
+async function aiApplyCatPath(item, path) {
+  item.resolved = item.resolved || {};
+  const id = aiFindLeafIdByLabel(path);
+  if (id) {
+    item.resolved.catalog_id = id;
+    const leaf = aiCatalogLeaves.find(l => l.id === id);
+    item.resolved.catalog_title = leaf?.title || path.split(">").pop().trim();
+    item.resolved.size_id = null;
+    item.resolved.size_title = "";
+    await aiLoadSizesForCatalog(id);
+    const sizes = aiSizesCache[id] || [];
+    const pick = aiPickSizeFromList(sizes, item.size);
+    if (pick) { item.resolved.size_id = pick.id; item.resolved.size_title = pick.title; }
+  } else {
+    item.resolved.catalog_id = null;
+    item.resolved.catalog_title = path.split(">").pop().trim();
+  }
+}
+
+function aiCatButtonsHtml(item) {
+  const cat = item.aiCat || { gender: "", section: "" };
+  // seed from current resolved path if aiCat empty
+  if (!cat.gender && item.resolved?.catalog_id) {
+    const leaf = aiCatalogLeaves.find(l => l.id === Number(item.resolved.catalog_id));
+    if (leaf?.path) {
+      const p = aiParsePathToCat(leaf.path);
+      if (AI_CATEGORY_TREE[p.gender]) { cat.gender = p.gender; if (AI_CATEGORY_TREE[p.gender][p.section]) cat.section = p.section; }
+      item.aiCat = cat;
+    }
+  }
+  const currentPath = item.resolved?.catalog_id
+    ? (aiCatalogLeaves.find(l => l.id === Number(item.resolved.catalog_id))?.path || item.resolved.catalog_title || "")
+    : "";
+  const tagBtn = currentPath
+    ? `<div style="margin-bottom:6px"><span style="display:inline-flex;align-items:center;gap:6px;background:#dcfce7;color:#166534;padding:4px 8px;border-radius:12px;font-size:12px">${aiEscape(currentPath)} <button type="button" class="ai-cat-clear" style="background:transparent;border:0;color:#166534;cursor:pointer;font-weight:bold">×</button></span></div>`
+    : "";
+  const genderBtns = Object.keys(AI_CATEGORY_TREE).map(g =>
+    `<button type="button" class="btn ai-cat-gender${cat.gender===g?" primary":""}" data-g="${aiEscape(g)}" style="margin:2px">${aiEscape(g)}</button>`
+  ).join("");
+  let sectionRow = "";
+  let subRow = "";
+  if (cat.gender && AI_CATEGORY_TREE[cat.gender]) {
+    const sections = Object.keys(AI_CATEGORY_TREE[cat.gender]);
+    sectionRow = `<div style="margin-top:6px">${sections.map(s =>
+      `<button type="button" class="btn ai-cat-section${cat.section===s?" primary":""}" data-s="${aiEscape(s)}" style="margin:2px">${aiEscape(s)}</button>`
+    ).join("")}</div>`;
+    if (cat.section && AI_CATEGORY_TREE[cat.gender][cat.section]) {
+      const subs = AI_CATEGORY_TREE[cat.gender][cat.section];
+      subRow = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${subs.map(sub => {
+        const fullPath = `${cat.gender} > ${cat.section} > ${sub}`;
+        const active = currentPath === fullPath;
+        return `<button type="button" class="btn ai-cat-sub${active?" primary":""}" data-sub="${aiEscape(sub)}" style="margin:2px;font-size:12px">${aiEscape(sub)}</button>`;
+      }).join("")}</div>`;
+    }
+  }
+  const breadcrumb = (cat.gender || cat.section)
+    ? `<div class="muted" style="font-size:11px;margin-bottom:4px">
+         <a href="#" class="ai-cat-crumb" data-lvl="0" style="color:inherit;text-decoration:underline">wszystkie</a>
+         ${cat.gender?` › <a href="#" class="ai-cat-crumb" data-lvl="1" style="color:inherit;text-decoration:underline">${aiEscape(cat.gender)}</a>`:""}
+         ${cat.section?` › <a href="#" class="ai-cat-crumb" data-lvl="2" style="color:inherit;text-decoration:underline">${aiEscape(cat.section)}</a>`:""}
+       </div>`
+    : "";
+  return `
+    ${tagBtn}
+    ${breadcrumb}
+    <div>${genderBtns}</div>
+    ${sectionRow}
+    ${subRow}
+    <label class="muted" style="margin-top:8px;display:block;font-size:11px">lub wpisz ręcznie</label>
+    <input class="ai-cat" list="aiCatList" type="text" value="${aiEscape(currentPath)}" style="width:100%" placeholder="np. Mężczyźni > Obuwie > Trekkingi" />
+    ${aiFieldWarn(item.resolved?.catalog_id)}
+  `;
+}
+
+
 function aiRenderCard(item) {
   const container = document.getElementById("aiItems");
   if (!container) return;
@@ -1740,9 +1842,8 @@ function aiRenderCard(item) {
         <textarea class="ai-desc" rows="4" style="width:100%">${aiEscape(gen.description)}</textarea>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:12px">
           <div style="grid-column:1/-1">
-            <label class="muted">Kategoria (wpisz, aby wyszukać)</label>
-            <input class="ai-cat" list="aiCatList" type="text" value="${aiEscape(catValue)}" style="width:100%" placeholder="np. Mężczyźni > Obuwie > Sneakersy" />
-            ${aiFieldWarn(res?.catalog_id)}
+            <label class="muted">Kategoria</label>
+            ${aiCatButtonsHtml(item)}
           </div>
           <div>
             <label class="muted">Rozmiar</label>
@@ -1850,6 +1951,37 @@ function aiRenderCard(item) {
       item.resolved.catalog_title = "";
       aiRenderCard(item);
     }
+  });
+  card.querySelectorAll(".ai-cat-gender").forEach(btn => btn.addEventListener("click", () => {
+    item.aiCat = { gender: btn.dataset.g, section: "" };
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-cat-section").forEach(btn => btn.addEventListener("click", () => {
+    item.aiCat = { gender: item.aiCat?.gender || "", section: btn.dataset.s };
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-cat-sub").forEach(btn => btn.addEventListener("click", async () => {
+    const g = item.aiCat?.gender || ""; const s = item.aiCat?.section || "";
+    if (!g || !s) return;
+    const fullPath = `${g} > ${s} > ${btn.dataset.sub}`;
+    await aiApplyCatPath(item, fullPath);
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-cat-crumb").forEach(a => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    const lvl = Number(a.dataset.lvl);
+    if (lvl === 0) item.aiCat = { gender: "", section: "" };
+    else if (lvl === 1) item.aiCat = { gender: item.aiCat?.gender || "", section: "" };
+    aiRenderCard(item);
+  }));
+  const catClear = card.querySelector(".ai-cat-clear");
+  if (catClear) catClear.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    item.resolved.catalog_id = null;
+    item.resolved.catalog_title = "";
+    item.resolved.size_id = null;
+    item.resolved.size_title = "";
+    aiRenderCard(item);
   });
   const sizeEl = card.querySelector(".ai-size");
   if (sizeEl && res?.catalog_id) sizeEl.addEventListener("change", e => {
