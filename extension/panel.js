@@ -2015,25 +2015,29 @@ function aiRenderCard(item) {
     }
   });
   card.querySelectorAll(".ai-cat-gender").forEach(btn => btn.addEventListener("click", () => {
-    item.aiCat = { gender: btn.dataset.g, section: "" };
+    item.aiCat = { gender: btn.dataset.g, section: "", subsection: "" };
     aiRenderCard(item);
   }));
   card.querySelectorAll(".ai-cat-section").forEach(btn => btn.addEventListener("click", () => {
-    item.aiCat = { gender: item.aiCat?.gender || "", section: btn.dataset.s };
+    item.aiCat = { gender: item.aiCat?.gender || "", section: btn.dataset.s, subsection: "" };
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-cat-subgroup").forEach(btn => btn.addEventListener("click", () => {
+    item.aiCat = { gender: item.aiCat?.gender || "", section: item.aiCat?.section || "", subsection: btn.dataset.sg };
     aiRenderCard(item);
   }));
   card.querySelectorAll(".ai-cat-sub").forEach(btn => btn.addEventListener("click", async () => {
-    const g = item.aiCat?.gender || ""; const s = item.aiCat?.section || "";
-    if (!g || !s) return;
-    const fullPath = `${g} > ${s} > ${btn.dataset.sub}`;
+    const fullPath = btn.dataset.full;
+    if (!fullPath) return;
     await aiApplyCatPath(item, fullPath);
     aiRenderCard(item);
   }));
   card.querySelectorAll(".ai-cat-crumb").forEach(a => a.addEventListener("click", (e) => {
     e.preventDefault();
     const lvl = Number(a.dataset.lvl);
-    if (lvl === 0) item.aiCat = { gender: "", section: "" };
-    else if (lvl === 1) item.aiCat = { gender: item.aiCat?.gender || "", section: "" };
+    if (lvl === 0) item.aiCat = { gender: "", section: "", subsection: "" };
+    else if (lvl === 1) item.aiCat = { gender: item.aiCat?.gender || "", section: "", subsection: "" };
+    else if (lvl === 2) item.aiCat = { gender: item.aiCat?.gender || "", section: item.aiCat?.section || "", subsection: "" };
     aiRenderCard(item);
   }));
   const catClear = card.querySelector(".ai-cat-clear");
@@ -2045,6 +2049,54 @@ function aiRenderCard(item) {
     item.resolved.size_title = "";
     aiRenderCard(item);
   });
+
+  const brandInput = card.querySelector(".ai-brand-input");
+  const brandSearch = card.querySelector(".ai-brand-search");
+  const brandResults = card.querySelector(".ai-brand-results");
+  const brandSelected = card.querySelector(".ai-brand-selected");
+
+  async function searchBrand(query) {
+    if (!query.trim()) return;
+    brandSearch.disabled = true;
+    brandSearch.textContent = "…";
+    try {
+      const tab = await getVintedTab();
+      if (!tab) return;
+      const r = await vintedMsg(tab.id, {
+        kind: "RESOLVE_AI_ATTRS_V2",
+        brand: query, category: "", color: "", condition: "", size: "", packageSize: ""
+      });
+      if (r?.resolved?.brand_id) {
+        const b = { id: r.resolved.brand_id, title: r.resolved.brand_title };
+        brandResults.style.display = "block";
+        brandResults.innerHTML = `<div class="ai-brand-opt" data-id="${b.id}" data-title="${aiEscape(b.title)}" style="padding:6px 10px;cursor:pointer;font-size:13px">${aiEscape(b.title)}</div>`;
+      } else {
+        brandResults.style.display = "block";
+        brandResults.innerHTML = `<div style="padding:6px;color:#c47b00;font-size:12px">Nie znaleziono — spróbuj innej nazwy</div>`;
+      }
+      brandResults.querySelectorAll(".ai-brand-opt").forEach(opt => {
+        opt.addEventListener("mouseenter", () => opt.style.background = "var(--s2)");
+        opt.addEventListener("mouseleave", () => opt.style.background = "");
+        opt.addEventListener("click", () => {
+          item.resolved = item.resolved || {};
+          item.resolved.brand_id = Number(opt.dataset.id);
+          item.resolved.brand_title = opt.dataset.title;
+          brandSelected.innerHTML = `✓ <b>${aiEscape(opt.dataset.title)}</b> (ID: ${opt.dataset.id})`;
+          brandResults.style.display = "none";
+          brandInput.value = opt.dataset.title;
+        });
+      });
+    } catch (e) {
+      brandResults.innerHTML = `<div style="padding:6px;font-size:12px;color:red">${aiEscape(e.message)}</div>`;
+      brandResults.style.display = "block";
+    } finally {
+      brandSearch.disabled = false;
+      brandSearch.textContent = "🔍 Szukaj";
+    }
+  }
+
+  if (brandSearch) brandSearch.addEventListener("click", () => searchBrand(brandInput.value));
+  if (brandInput) brandInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); searchBrand(brandInput.value); } });
   const sizeEl = card.querySelector(".ai-size");
   if (sizeEl && res?.catalog_id) sizeEl.addEventListener("change", e => {
     const id = Number(e.target.value) || null;
