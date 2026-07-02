@@ -1698,21 +1698,43 @@ function aiFieldWarn(v) {
   return (v == null || v === "" ) ? `<div class="muted" style="color:#c47b00">⚠ nie rozpoznano — popraw nazwę/rozmiar i wygeneruj ponownie</div>` : "";
 }
 
+async function aiCompressPhoto(dataUrl, maxSide = 2000, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxSide || h > maxSide) {
+        const ratio = Math.min(maxSide / w, maxSide / h);
+        w = Math.round(w * ratio); h = Math.round(h * ratio);
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => reject(new Error("decode fail"));
+    img.src = dataUrl;
+  });
+}
+
 const AI_CATEGORY_TREE = {
   "Mężczyźni": {
-    "Obuwie": ["Sneakersy","Trekkingi","Buty do biegania","Sandały i klapki","Mokasyny i lordsy","Kozaki i botki","Półbuty i oksfordy","Kalosze i śniegowce","Kapcie","Obuwie sportowe > Halówki piłkarskie","Obuwie sportowe > Buty do fitnessu","Obuwie sportowe > Buty motocyklowe","Obuwie sportowe > Rolki i wrotki"],
-    "Ubrania": ["Kurtki i płaszcze","Bluzy","T-shirty","Spodnie","Swetry i kardigany","Koszule","Dresy","Szorty","Bielizna i skarpety"],
-    "Akcesoria": ["Czapki i kapelusze","Torby i plecaki","Paski","Zegarki"]
+    "Obuwie": {
+      "__items": ["Sneakersy","Trekkingi","Buty do biegania","Sandały i klapki","Mokasyny i lordsy","Kozaki i botki","Półbuty i oksfordy","Kalosze i śniegowce","Kapcie"],
+      "Obuwie sportowe": ["Halówki piłkarskie","Buty do fitnessu","Buty motocyklowe","Rolki i wrotki"]
+    },
+    "Ubrania": { "__items": ["Kurtki i płaszcze","Bluzy","T-shirty","Spodnie","Swetry i kardigany","Koszule","Dresy","Szorty","Bielizna i skarpety"] },
+    "Akcesoria": { "__items": ["Czapki i kapelusze","Torby i plecaki","Paski","Zegarki"] }
   },
   "Kobiety": {
-    "Obuwie": ["Sneakersy","Trekkingi","Buty na obcasie","Kozaki i botki","Sandały i klapki","Baleriny i mokasyny","Buty sportowe","Kapcie","Kalosze i śniegowce"],
-    "Ubrania": ["Sukienki","Bluzki i koszule","Kurtki i płaszcze","Spodnie","Spódnice","Swetry i kardigany","Bluzy","T-shirty","Bielizna i piżamy","Stroje kąpielowe","Dresy i komplety"],
-    "Akcesoria": ["Torebki","Szale i chusty","Biżuteria","Zegarki","Czapki i kapelusze"]
+    "Obuwie": { "__items": ["Sneakersy","Trekkingi","Buty na obcasie","Kozaki i botki","Sandały i klapki","Baleriny i mokasyny","Buty sportowe","Kapcie","Kalosze i śniegowce"] },
+    "Ubrania": { "__items": ["Sukienki","Bluzki i koszule","Kurtki i płaszcze","Spodnie","Spódnice","Swetry i kardigany","Bluzy","T-shirty","Bielizna i piżamy","Stroje kąpielowe","Dresy i komplety"] },
+    "Akcesoria": { "__items": ["Torebki","Szale i chusty","Biżuteria","Zegarki","Czapki i kapelusze"] }
   },
   "Dzieci": {
-    "Obuwie": ["Sneakersy","Sandały","Buty zimowe","Kapcie"],
-    "Ubrania": ["Kurtki","Spodnie","Bluzy","T-shirty","Sukienki i spódniczki"],
-    "Akcesoria": ["Czapki"]
+    "Obuwie": { "__items": ["Sneakersy","Sandały","Buty zimowe","Kapcie"] },
+    "Ubrania": { "__items": ["Kurtki","Spodnie","Bluzy","T-shirty","Sukienki i spódniczki"] },
+    "Akcesoria": { "__items": ["Czapki"] }
   }
 };
 
@@ -1745,53 +1767,85 @@ async function aiApplyCatPath(item, path) {
 }
 
 function aiCatButtonsHtml(item) {
-  const cat = item.aiCat || { gender: "", section: "" };
-  // seed from current resolved path if aiCat empty
+  const cat = item.aiCat || { gender: "", section: "", subsection: "" };
+
   if (!cat.gender && item.resolved?.catalog_id) {
     const leaf = aiCatalogLeaves.find(l => l.id === Number(item.resolved.catalog_id));
     if (leaf?.path) {
-      const p = aiParsePathToCat(leaf.path);
-      if (AI_CATEGORY_TREE[p.gender]) { cat.gender = p.gender; if (AI_CATEGORY_TREE[p.gender][p.section]) cat.section = p.section; }
+      const parts = leaf.path.split(">").map(s => s.trim());
+      cat.gender = parts[0] || "";
+      cat.section = parts[1] || "";
+      cat.subsection = parts.length > 3 ? parts[2] : "";
       item.aiCat = cat;
     }
   }
+
   const currentPath = item.resolved?.catalog_id
     ? (aiCatalogLeaves.find(l => l.id === Number(item.resolved.catalog_id))?.path || item.resolved.catalog_title || "")
     : "";
+
   const tagBtn = currentPath
-    ? `<div style="margin-bottom:6px"><span style="display:inline-flex;align-items:center;gap:6px;background:#dcfce7;color:#166534;padding:4px 8px;border-radius:12px;font-size:12px">${aiEscape(currentPath)} <button type="button" class="ai-cat-clear" style="background:transparent;border:0;color:#166534;cursor:pointer;font-weight:bold">×</button></span></div>`
+    ? `<div style="margin-bottom:6px"><span style="display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--p) 15%,var(--s2));color:var(--p);padding:4px 8px;border-radius:12px;font-size:12px">${aiEscape(currentPath)} <button type="button" class="ai-cat-clear" style="background:transparent;border:0;color:var(--p);cursor:pointer;font-weight:bold">×</button></span></div>`
     : "";
-  const genderBtns = Object.keys(AI_CATEGORY_TREE).map(g =>
+
+  let breadParts = [];
+  if (cat.gender) breadParts.push({ label: cat.gender, lvl: 1 });
+  if (cat.section) breadParts.push({ label: cat.section, lvl: 2 });
+  if (cat.subsection) breadParts.push({ label: cat.subsection, lvl: 3 });
+  const breadcrumb = breadParts.length
+    ? `<div class="muted" style="font-size:11px;margin-bottom:4px">
+        <a href="#" class="ai-cat-crumb" data-lvl="0" style="color:inherit;text-decoration:underline">wszystkie</a>
+        ${breadParts.map(p => ` › <a href="#" class="ai-cat-crumb" data-lvl="${p.lvl}" style="color:inherit;text-decoration:underline">${aiEscape(p.label)}</a>`).join("")}
+      </div>`
+    : "";
+
+  const genderBtns = `<div>${Object.keys(AI_CATEGORY_TREE).map(g =>
     `<button type="button" class="btn ai-cat-gender${cat.gender===g?" primary":""}" data-g="${aiEscape(g)}" style="margin:2px">${aiEscape(g)}</button>`
-  ).join("");
+  ).join("")}</div>`;
+
   let sectionRow = "";
-  let subRow = "";
   if (cat.gender && AI_CATEGORY_TREE[cat.gender]) {
     const sections = Object.keys(AI_CATEGORY_TREE[cat.gender]);
     sectionRow = `<div style="margin-top:6px">${sections.map(s =>
       `<button type="button" class="btn ai-cat-section${cat.section===s?" primary":""}" data-s="${aiEscape(s)}" style="margin:2px">${aiEscape(s)}</button>`
     ).join("")}</div>`;
-    if (cat.section && AI_CATEGORY_TREE[cat.gender][cat.section]) {
-      const subs = AI_CATEGORY_TREE[cat.gender][cat.section];
-      subRow = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${subs.map(sub => {
+  }
+
+  let subgroupRow = "";
+  let subRow = "";
+  if (cat.gender && cat.section && AI_CATEGORY_TREE[cat.gender]?.[cat.section]) {
+    const sectionData = AI_CATEGORY_TREE[cat.gender][cat.section];
+    const directItems = sectionData["__items"] || [];
+    const subgroups = Object.keys(sectionData).filter(k => k !== "__items");
+
+    if (subgroups.length) {
+      subgroupRow = `<div style="margin-top:6px">${subgroups.map(sg =>
+        `<button type="button" class="btn ai-cat-subgroup${cat.subsection===sg?" primary":""}" data-sg="${aiEscape(sg)}" style="margin:2px;font-size:12px;background:color-mix(in srgb,var(--p) 8%,var(--s2))">${aiEscape(sg)}</button>`
+      ).join("")}</div>`;
+    }
+
+    if (cat.subsection && sectionData[cat.subsection]) {
+      const subItems = sectionData[cat.subsection];
+      subRow = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${subItems.map(sub => {
+        const fullPath = `${cat.gender} > ${cat.section} > ${cat.subsection} > ${sub}`;
+        const active = currentPath === fullPath;
+        return `<button type="button" class="btn ai-cat-sub${active?" primary":""}" data-sub="${aiEscape(sub)}" data-full="${aiEscape(fullPath)}" style="margin:2px;font-size:12px">${aiEscape(sub)}</button>`;
+      }).join("")}</div>`;
+    } else if (directItems.length) {
+      subRow = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${directItems.map(sub => {
         const fullPath = `${cat.gender} > ${cat.section} > ${sub}`;
         const active = currentPath === fullPath;
-        return `<button type="button" class="btn ai-cat-sub${active?" primary":""}" data-sub="${aiEscape(sub)}" style="margin:2px;font-size:12px">${aiEscape(sub)}</button>`;
+        return `<button type="button" class="btn ai-cat-sub${active?" primary":""}" data-sub="${aiEscape(sub)}" data-full="${aiEscape(fullPath)}" style="margin:2px;font-size:12px">${aiEscape(sub)}</button>`;
       }).join("")}</div>`;
     }
   }
-  const breadcrumb = (cat.gender || cat.section)
-    ? `<div class="muted" style="font-size:11px;margin-bottom:4px">
-         <a href="#" class="ai-cat-crumb" data-lvl="0" style="color:inherit;text-decoration:underline">wszystkie</a>
-         ${cat.gender?` › <a href="#" class="ai-cat-crumb" data-lvl="1" style="color:inherit;text-decoration:underline">${aiEscape(cat.gender)}</a>`:""}
-         ${cat.section?` › <a href="#" class="ai-cat-crumb" data-lvl="2" style="color:inherit;text-decoration:underline">${aiEscape(cat.section)}</a>`:""}
-       </div>`
-    : "";
+
   return `
     ${tagBtn}
     ${breadcrumb}
-    <div>${genderBtns}</div>
+    ${genderBtns}
     ${sectionRow}
+    ${subgroupRow}
     ${subRow}
     <label class="muted" style="margin-top:8px;display:block;font-size:11px">lub wpisz ręcznie</label>
     <input class="ai-cat" list="aiCatList" type="text" value="${aiEscape(currentPath)}" style="width:100%" placeholder="np. Mężczyźni > Obuwie > Trekkingi" />
@@ -1854,7 +1908,15 @@ function aiRenderCard(item) {
             <label class="muted">Stan</label>
             <select class="ai-status" style="width:100%">${statusOpts}</select>
           </div>
-          <div><b>Marka:</b> ${aiEscape(res?.brand_title) || "—"} ${aiFieldWarn(res?.brand_id)}</div>
+          <div style="grid-column:1/-1">
+            <label class="muted">Marka</label>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="ai-brand-input" type="text" value="${aiEscape(res?.brand_title || item.gen?.brand || '')}" placeholder="Wpisz markę…" style="flex:1" />
+              <button type="button" class="btn ai-brand-search" style="white-space:nowrap">🔍 Szukaj</button>
+            </div>
+            <div class="ai-brand-results" style="display:none;max-height:120px;overflow-y:auto;border:1px solid var(--b);border-radius:6px;margin-top:4px"></div>
+            <div class="ai-brand-selected" style="margin-top:4px;font-size:12px">${res?.brand_id ? `✓ <b>${aiEscape(res.brand_title)}</b> (ID: ${res.brand_id})` : '<span style="color:#c47b00">⚠ nie wybrano marki</span>'}</div>
+          </div>
           <div><b>Kolor:</b> ${aiEscape(res?.color_title) || "—"} ${aiFieldWarn(res?.color_id)}</div>
           <div><b>Paczka (ID):</b> ${res?.package_size_id ?? "—"} ${aiFieldWarn(res?.package_size_id)}</div>
         </div>
@@ -1953,25 +2015,29 @@ function aiRenderCard(item) {
     }
   });
   card.querySelectorAll(".ai-cat-gender").forEach(btn => btn.addEventListener("click", () => {
-    item.aiCat = { gender: btn.dataset.g, section: "" };
+    item.aiCat = { gender: btn.dataset.g, section: "", subsection: "" };
     aiRenderCard(item);
   }));
   card.querySelectorAll(".ai-cat-section").forEach(btn => btn.addEventListener("click", () => {
-    item.aiCat = { gender: item.aiCat?.gender || "", section: btn.dataset.s };
+    item.aiCat = { gender: item.aiCat?.gender || "", section: btn.dataset.s, subsection: "" };
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-cat-subgroup").forEach(btn => btn.addEventListener("click", () => {
+    item.aiCat = { gender: item.aiCat?.gender || "", section: item.aiCat?.section || "", subsection: btn.dataset.sg };
     aiRenderCard(item);
   }));
   card.querySelectorAll(".ai-cat-sub").forEach(btn => btn.addEventListener("click", async () => {
-    const g = item.aiCat?.gender || ""; const s = item.aiCat?.section || "";
-    if (!g || !s) return;
-    const fullPath = `${g} > ${s} > ${btn.dataset.sub}`;
+    const fullPath = btn.dataset.full;
+    if (!fullPath) return;
     await aiApplyCatPath(item, fullPath);
     aiRenderCard(item);
   }));
   card.querySelectorAll(".ai-cat-crumb").forEach(a => a.addEventListener("click", (e) => {
     e.preventDefault();
     const lvl = Number(a.dataset.lvl);
-    if (lvl === 0) item.aiCat = { gender: "", section: "" };
-    else if (lvl === 1) item.aiCat = { gender: item.aiCat?.gender || "", section: "" };
+    if (lvl === 0) item.aiCat = { gender: "", section: "", subsection: "" };
+    else if (lvl === 1) item.aiCat = { gender: item.aiCat?.gender || "", section: "", subsection: "" };
+    else if (lvl === 2) item.aiCat = { gender: item.aiCat?.gender || "", section: item.aiCat?.section || "", subsection: "" };
     aiRenderCard(item);
   }));
   const catClear = card.querySelector(".ai-cat-clear");
@@ -1983,6 +2049,54 @@ function aiRenderCard(item) {
     item.resolved.size_title = "";
     aiRenderCard(item);
   });
+
+  const brandInput = card.querySelector(".ai-brand-input");
+  const brandSearch = card.querySelector(".ai-brand-search");
+  const brandResults = card.querySelector(".ai-brand-results");
+  const brandSelected = card.querySelector(".ai-brand-selected");
+
+  async function searchBrand(query) {
+    if (!query.trim()) return;
+    brandSearch.disabled = true;
+    brandSearch.textContent = "…";
+    try {
+      const tab = await getVintedTab();
+      if (!tab) return;
+      const r = await vintedMsg(tab.id, {
+        kind: "RESOLVE_AI_ATTRS_V2",
+        brand: query, category: "", color: "", condition: "", size: "", packageSize: ""
+      });
+      if (r?.resolved?.brand_id) {
+        const b = { id: r.resolved.brand_id, title: r.resolved.brand_title };
+        brandResults.style.display = "block";
+        brandResults.innerHTML = `<div class="ai-brand-opt" data-id="${b.id}" data-title="${aiEscape(b.title)}" style="padding:6px 10px;cursor:pointer;font-size:13px">${aiEscape(b.title)}</div>`;
+      } else {
+        brandResults.style.display = "block";
+        brandResults.innerHTML = `<div style="padding:6px;color:#c47b00;font-size:12px">Nie znaleziono — spróbuj innej nazwy</div>`;
+      }
+      brandResults.querySelectorAll(".ai-brand-opt").forEach(opt => {
+        opt.addEventListener("mouseenter", () => opt.style.background = "var(--s2)");
+        opt.addEventListener("mouseleave", () => opt.style.background = "");
+        opt.addEventListener("click", () => {
+          item.resolved = item.resolved || {};
+          item.resolved.brand_id = Number(opt.dataset.id);
+          item.resolved.brand_title = opt.dataset.title;
+          brandSelected.innerHTML = `✓ <b>${aiEscape(opt.dataset.title)}</b> (ID: ${opt.dataset.id})`;
+          brandResults.style.display = "none";
+          brandInput.value = opt.dataset.title;
+        });
+      });
+    } catch (e) {
+      brandResults.innerHTML = `<div style="padding:6px;font-size:12px;color:red">${aiEscape(e.message)}</div>`;
+      brandResults.style.display = "block";
+    } finally {
+      brandSearch.disabled = false;
+      brandSearch.textContent = "🔍 Szukaj";
+    }
+  }
+
+  if (brandSearch) brandSearch.addEventListener("click", () => searchBrand(brandInput.value));
+  if (brandInput) brandInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); searchBrand(brandInput.value); } });
   const sizeEl = card.querySelector(".ai-size");
   if (sizeEl && res?.catalog_id) sizeEl.addEventListener("change", e => {
     const id = Number(e.target.value) || null;
@@ -2174,7 +2288,20 @@ async function aiRun(mode) {
         package_size_id: r.package_size_id,
         is_unisex: false,
       };
-      const resp = await vintedMsg(tab.id, { kind: "CREATE_LISTING_V2", attributes, photos: it.photos, mode });
+      const compressedPhotos = [];
+      for (const dataUrl of it.photos) {
+        try {
+          const compressed = await aiCompressPhoto(dataUrl);
+          compressedPhotos.push(compressed);
+        } catch (e) {
+          aiLog(`  · pominięto zdjęcie: ${e.message}`, "warn");
+        }
+      }
+      if (!compressedPhotos.length) {
+        aiLog(`  ✗ brak zdjęć do wgrania`, "err");
+        continue;
+      }
+      const resp = await vintedMsg(tab.id, { kind: "CREATE_LISTING_V2", attributes, photos: compressedPhotos, mode });
       if (resp?.ok) {
         aiLog(`  ✓ ${mode === "publish" ? "opublikowano" : "zapisano jako draft"} (ID ${resp.id})`, "ok");
       } else {
