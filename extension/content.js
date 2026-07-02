@@ -1663,6 +1663,7 @@
           vinted_user_id: String(me.id),
           vinted_username: me.login || me.username || "",
           vinted_domain: host,
+          user_agent: navigator.userAgent,
         }),
       });
     } catch (e) {
