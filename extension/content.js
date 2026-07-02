@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.17";
+  const CONTENT_VERSION = "1.0.18";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -435,10 +435,133 @@
     const hit = all.find(x => x.id === Number(sizeId));
     return hit ? hit.title : "";
   }
+  // ---- AI attr resolvers (name -> id) ----
+  let vmColors = null;
+  const vmPkgCache = {};
 
+  function norm(s) { return (s == null ? "" : String(s)).trim().toLowerCase(); }
 
+  async function loadColors() {
+    if (vmColors) return vmColors;
+    try {
+      const r = await vintedApi("/api/v2/colors");
+      vmColors = r?.colors || r?.dtos || r?.color || [];
+    } catch { vmColors = []; }
+    return vmColors;
+  }
 
+  async function resolveColorId(name) {
+    if (!name) return null;
+    const list = await loadColors();
+    const q = norm(name);
+    if (!q) return null;
+    let hit = list.find(c => norm(c.title) === q);
+    if (!hit) hit = list.find(c => norm(c.title).includes(q) || q.includes(norm(c.title)));
+    return hit ? { id: Number(hit.id), title: String(hit.title) } : null;
+  }
 
+  async function resolveBrandId(name) {
+    if (!name) return null;
+    const q = String(name).trim();
+    const enc = encodeURIComponent(q);
+    let list = [];
+    try {
+      const r = await vintedApi(`/api/v2/brands?search_text=${enc}`);
+      list = r?.brands || r?.dtos || [];
+    } catch {}
+    if (!list.length) {
+      try {
+        const r2 = await vintedApi(`/api/v2/brands?keyword=${enc}`);
+        list = r2?.brands || r2?.dtos || [];
+      } catch {}
+    }
+    if (!list.length) return null;
+    const nq = norm(q);
+    const exact = list.find(b => norm(b.title) === nq);
+    const pick = exact || list[0];
+    return { id: Number(pick.id), title: String(pick.title) };
+  }
+
+  function collectCatalogNodesWithParents(nodes, parents, acc) {
+    if (!nodes) return acc;
+    const arr = Array.isArray(nodes) ? nodes : [nodes];
+    for (const n of arr) {
+      if (!n || typeof n !== "object") continue;
+      acc.push({ node: n, parents });
+      const kids = n.catalogs || n.children || n.catalog;
+      if (kids) collectCatalogNodesWithParents(kids, [...parents, n], acc);
+    }
+    return acc;
+  }
+
+  async function resolveCatalogIdByName(pathOrName) {
+    if (!pathOrName) return null;
+    const tree = await loadCatalogTree();
+    const parts = String(pathOrName).split(">").map(norm).filter(Boolean);
+    if (!parts.length) return null;
+    const leaf = parts[parts.length - 1];
+    const all = collectCatalogNodesWithParents(tree, [], []);
+    const candidates = all.filter(({ node }) => {
+      const t = norm(node.title);
+      return t === leaf || t.includes(leaf) || leaf.includes(t);
+    });
+    if (!candidates.length) return null;
+    const ancestors = parts.slice(0, -1);
+    let best = null;
+    let bestScore = -1;
+    for (const c of candidates) {
+      let score = 0;
+      const parentTitles = c.parents.map(p => norm(p.title));
+      for (const a of ancestors) {
+        if (parentTitles.some(pt => pt === a || pt.includes(a) || a.includes(pt))) score++;
+      }
+      if (norm(c.node.title) === leaf) score += 0.5;
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    const pick = (best || candidates[0]).node;
+    return { id: Number(pick.id), title: String(pick.title) };
+  }
+
+  async function resolveSizeIdByName(catalogId, sizeName) {
+    if (!sizeName || !catalogId) return null;
+    const attrs = await loadCatalogAttributes(catalogId);
+    const sizeAttr = (attrs || []).find(a => a && a.code === "size");
+    if (!sizeAttr) return null;
+    const all = collectIdTitle(sizeAttr, []);
+    const raw = norm(sizeName);
+    const q = raw.replace(/eu|us|uk/g, "").trim();
+    let hit = all.find(x => norm(x.title) === raw);
+    if (!hit && q) hit = all.find(x => norm(x.title) === q);
+    if (!hit && q) hit = all.find(x => norm(x.title).includes(q));
+    if (!hit && q) hit = all.find(x => q.includes(norm(x.title)) && norm(x.title));
+    return hit ? { id: Number(hit.id), title: String(hit.title) } : null;
+  }
+
+  async function resolvePackageSizeId(catalogId, sizeSml) {
+    if (!sizeSml) return null;
+    const raw = norm(sizeSml);
+    let idx = null;
+    if (["s", "mała", "mala", "small", "małe", "male"].includes(raw)) idx = 0;
+    else if (["m", "średnia", "srednia", "medium", "średnie", "srednie"].includes(raw)) idx = 1;
+    else if (["l", "duża", "duza", "large", "duże", "duze"].includes(raw)) idx = 2;
+    if (idx == null) return null;
+    if (catalogId) {
+      const cacheKey = String(catalogId);
+      if (!vmPkgCache[cacheKey]) {
+        try {
+          const r = await vintedApi(`/api/v2/catalogs/${catalogId}/package_sizes`);
+          const list = r?.package_sizes || r?.dtos || r || [];
+          vmPkgCache[cacheKey] = Array.isArray(list)
+            ? list.slice().sort((a, b) => Number(a.id) - Number(b.id))
+            : [];
+        } catch { vmPkgCache[cacheKey] = []; }
+      }
+      const list = vmPkgCache[cacheKey];
+      if (list[idx]?.id != null) return Number(list[idx].id);
+    }
+    const fallback = [1, 2, 3];
+    return fallback[idx];
+  }
 
 
   const STATUS_LABEL_TO_ID = {
@@ -777,7 +900,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RESOLVE_AI_ATTRS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
@@ -807,6 +930,28 @@
             resolvedSize: size, resolvedCategory: category,
           };
           sendResponse({ ok: true, size, category, diag });
+        }
+        else if (msg.kind === "RESOLVE_AI_ATTRS_V2") {
+          const cat = await resolveCatalogIdByName(msg.category);
+          const catalog_id = cat?.id || null;
+          const sz = await resolveSizeIdByName(catalog_id, msg.size);
+          const br = await resolveBrandId(msg.brand);
+          const col = await resolveColorId(msg.color);
+          const status_id = STATUS_LABEL_TO_ID[norm(msg.condition)] || null;
+          const package_size_id = await resolvePackageSizeId(catalog_id, msg.packageSize);
+          const resolved = {
+            catalog_id, catalog_title: cat?.title || "",
+            size_id: sz?.id || null, size_title: sz?.title || "",
+            brand_id: br?.id || null, brand_title: br?.title || "",
+            color_id: col?.id || null, color_title: col?.title || "",
+            status_id, status_label: msg.condition || "",
+            package_size_id,
+          };
+          const diag = {
+            catFound: !!cat, sizeFound: !!sz, brandFound: !!br,
+            colorFound: !!col, statusFound: !!status_id, pkg: package_size_id,
+          };
+          sendResponse({ ok: true, resolved, diag });
         }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
