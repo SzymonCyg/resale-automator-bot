@@ -1946,6 +1946,7 @@ document.getElementById("aiGenerateBtn")?.addEventListener("click", async () => 
   if (!tab) { aiLog("Otwórz zalogowaną kartę vinted.*", "err"); return; }
   btn.disabled = true;
   try {
+    await aiEnsureCatalogLeaves();
     for (let i = 0; i < targets.length; i++) {
       const it = targets[i];
       if (status) status.textContent = `Generuję (${i+1}/${targets.length}): ${it.name}`;
@@ -1959,12 +1960,26 @@ document.getElementById("aiGenerateBtn")?.addEventListener("click", async () => 
           condition: gen.condition, size: it.size, packageSize: it.packageSize,
         });
         it.resolved = r?.resolved || null;
+        if (it.resolved) {
+          if (!it.resolved.status_id && AI_STATUS_MAP[gen.condition]) {
+            it.resolved.status_id = AI_STATUS_MAP[gen.condition];
+            it.resolved.status_label = gen.condition;
+          }
+          if (it.resolved.catalog_id) {
+            const sizes = await aiLoadSizesForCatalog(it.resolved.catalog_id);
+            if (!it.resolved.size_id) {
+              const pick = aiPickSizeFromList(sizes, it.size);
+              if (pick) { it.resolved.size_id = pick.id; it.resolved.size_title = pick.title; }
+            }
+          }
+        }
         aiRenderCard(it);
         aiLog(`  ✓ wygenerowano: ${gen.title}`, "ok");
       } catch (e) {
         aiLog(`  ✗ ${e.message}`, "err");
       }
     }
+
   } finally {
     btn.disabled = false;
     if (status) status.textContent = "";
