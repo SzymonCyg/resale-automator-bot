@@ -1594,8 +1594,70 @@ initPublishDraftsUI();
 // =================== DODAJ Z AI ===================
 let aiItems = [];
 const AI_DELAY_DEFAULTS = { aiDelayMin: 30, aiDelayMax: 60 };
+const AI_STATUS_MAP = { "Nowy z metką": 1, "Nowy bez metki": 2, "Bardzo dobry": 6, "Dobry": 3, "Zadowalający": 4 };
+const AI_STATUS_OPTIONS = ["Nowy z metką", "Nowy bez metki", "Bardzo dobry", "Dobry", "Zadowalający"];
+let aiCatalogLeaves = [];
+let aiLeafByLabel = {};
+let aiSizesCache = {};
 
-function aiUid() { return "ai_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function aiNorm(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
+
+async function aiEnsureCatalogLeaves() {
+  if (aiCatalogLeaves.length) return;
+  try {
+    const tab = await getVintedTab();
+    if (!tab) return;
+    const r = await vintedMsg(tab.id, { kind: "GET_CATALOG_LEAVES_V2" });
+    if (r?.ok && Array.isArray(r.leaves)) {
+      aiCatalogLeaves = r.leaves;
+      aiLeafByLabel = {};
+      const dl = document.getElementById("aiCatList");
+      if (dl) dl.innerHTML = "";
+      for (const l of aiCatalogLeaves) {
+        aiLeafByLabel[l.path] = l.id;
+        if (dl) {
+          const opt = document.createElement("option");
+          opt.value = l.path;
+          dl.appendChild(opt);
+        }
+      }
+    }
+  } catch {}
+}
+
+async function aiLoadSizesForCatalog(catalogId) {
+  if (!catalogId) return [];
+  if (aiSizesCache[catalogId]) return aiSizesCache[catalogId];
+  try {
+    const tab = await getVintedTab();
+    if (!tab) return [];
+    const r = await vintedMsg(tab.id, { kind: "GET_CATALOG_SIZES_V2", catalog_id: catalogId });
+    aiSizesCache[catalogId] = (r?.ok && Array.isArray(r.sizes)) ? r.sizes : [];
+  } catch { aiSizesCache[catalogId] = []; }
+  return aiSizesCache[catalogId];
+}
+
+function aiFindLeafIdByLabel(value) {
+  if (!value) return null;
+  if (aiLeafByLabel[value] != null) return aiLeafByLabel[value];
+  const v = aiNorm(value);
+  const exact = aiCatalogLeaves.find(l => aiNorm(l.path) === v || aiNorm(l.title) === v);
+  if (exact) return exact.id;
+  const contain = aiCatalogLeaves.find(l => aiNorm(l.path).includes(v) || v.includes(aiNorm(l.title)));
+  return contain ? contain.id : null;
+}
+
+function aiPickSizeFromList(sizes, userSize) {
+  if (!sizes.length || !userSize) return null;
+  const raw = aiNorm(userSize);
+  const clean = raw.replace(/eu|us|uk/g, "").trim();
+  let hit = sizes.find(s => aiNorm(s.title) === raw);
+  if (!hit && clean) hit = sizes.find(s => aiNorm(s.title) === clean);
+  if (!hit && clean) hit = sizes.find(s => aiNorm(s.title).replace(/\s+/g, "") === clean.replace(/\s+/g, ""));
+  if (!hit && clean) hit = sizes.find(s => aiNorm(s.title).includes(clean));
+  return hit || null;
+}
+
 
 function aiLog(msg, cls = "") {
   const el = document.getElementById("aiRunLog");
