@@ -282,21 +282,25 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
     try {
       const r = await vintedMsg(tab.id, { kind: "FETCH_ITEM_DETAIL_V2", id: it.id });
       const detail = r?.item || it;
-      if (i === 0) {
-        try {
-          const keys = detail ? Object.keys(detail) : [];
-          const rel = {};
-          for (const k of keys) { if (/size|catalog|categ|brand|color|status|condition/i.test(k)) rel[k] = JSON.stringify(detail[k])?.slice(0,90); }
-          const el = document.getElementById("exportDebug");
-          if (el) el.textContent = "DETAIL keys: " + keys.join(",") + "\n\nrel: " + JSON.stringify(rel, null, 1);
-          console.log("VM_DETAIL_DIAG", detail);
-        } catch(e) {}
-      }
+      let resolved = null;
+      try {
+        const rl = await vintedMsg(tab.id, { kind: "RESOLVE_LABELS_V2", catalog_id: detail.catalog_id, size_id: detail.size_id });
+        resolved = rl || null;
+        if (i === 0) {
+          try {
+            const el = document.getElementById("exportDebug");
+            if (el) el.textContent = "RESOLVE diag: " + JSON.stringify(rl?.diag || rl, null, 1);
+            console.log("VM_RESOLVE_DIAG", rl);
+            console.log("VM_DETAIL_DIAG", detail);
+          } catch(e) {}
+        }
+      } catch (e) { console.warn("resolve failed", it.id, e); }
       let labels = null;
       try {
         const lab = await vintedMsg(tab.id, { kind: "FETCH_ITEM_LABELS_V2", id: it.id });
         labels = lab?.labels || null;
       } catch (e) { console.warn("labels failed", it.id, e); }
+
 
       let photoUrls = (detail.photos || [])
         .map((p) => p?.full_size_url || p?.url)
@@ -315,11 +319,12 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
         _it: it,
         _detail: detail,
         _labels: labels,
+        _resolved: resolved,
         _photos: mirrored,
       });
     } catch (e) {
       console.warn("item failed", it.id, e);
-      rows.push({ _it: it, _detail: it, _labels: null, _photos: [] });
+      rows.push({ _it: it, _detail: it, _labels: null, _resolved: null, _photos: [] });
     }
     await new Promise((res) => setTimeout(res, 400 + Math.random() * 400));
   }
@@ -339,9 +344,10 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
     return { brand, size, category, colors };
   }
 
-  const outRows = rows.map(({ _it, _detail, _labels, _photos }) => {
+  const outRows = rows.map(({ _it, _detail, _labels, _resolved, _photos }) => {
     const d = _detail || {};
     const pub = _labels || {};
+    const rl = _resolved || {};
     const det = labelFromDetail(d);
     const attrs = Array.isArray(d.item_attributes) ? d.item_attributes : [];
     const condAttr = attrs.find(a => a && a.code === "condition");
@@ -350,9 +356,9 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
     const brandId = d.brand_id || valId(d.brand_dto) || valId(d.brand) || "";
     const brandLabel = det.brand || pub.brand || _it.brand || "";
     const sizeId = d.size_id || valId(d.size) || "";
-    const sizeLabel = det.size || pub.size || _it.size_title || "";
+    const sizeLabel = rl.size || det.size || pub.size || _it.size_title || "";
     const catalogId = d.catalog_id || valId(d.catalog) || "";
-    const catalogLabel = det.category || pub.category || "";
+    const catalogLabel = rl.category || det.category || pub.category || "";
     const colorIds = [d.color1_id, d.color2_id].filter(c => c != null);
     const colorLabels = (det.colors && det.colors.length) ? det.colors : (Array.isArray(pub.colors) ? pub.colors.filter(Boolean) : []);
     const packageId = d.package_size_id || valId(d.package_size) || "";

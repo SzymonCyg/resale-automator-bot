@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.14";
+  const CONTENT_VERSION = "1.0.15";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -356,6 +356,78 @@
     return { brand, size, category, colors };
   }
 
+  // ============ Catalog & size dictionary resolvers ============
+  let vmCatalogTree = null;
+  const vmCatalogAttrCache = {};
+
+  async function loadCatalogTree() {
+    if (vmCatalogTree) return vmCatalogTree;
+    try {
+      const r = await vintedApi("/api/v2/item_upload/catalogs");
+      vmCatalogTree = r?.catalogs || r?.dtos || r?.catalog || r || [];
+    } catch { vmCatalogTree = []; }
+    return vmCatalogTree;
+  }
+
+  function findInTree(nodes, id) {
+    if (!nodes) return "";
+    const arr = Array.isArray(nodes) ? nodes : [nodes];
+    for (const n of arr) {
+      if (!n || typeof n !== "object") continue;
+      if (Number(n.id) === Number(id) && n.title) return n.title;
+      const kids = n.catalogs || n.children || n.catalog;
+      if (kids) {
+        const hit = findInTree(kids, id);
+        if (hit) return hit;
+      }
+    }
+    return "";
+  }
+
+  async function resolveCategoryName(catalogId) {
+    if (!catalogId) return "";
+    const tree = await loadCatalogTree();
+    return findInTree(tree, Number(catalogId)) || "";
+  }
+
+  async function loadCatalogAttributes(catalogId) {
+    if (vmCatalogAttrCache[catalogId]) return vmCatalogAttrCache[catalogId];
+    try {
+      const r = await vintedApi(`/api/v2/item_upload/attributes?catalog_id=${catalogId}`);
+      vmCatalogAttrCache[catalogId] = r?.attributes || r?.dtos || [];
+    } catch { vmCatalogAttrCache[catalogId] = []; }
+    return vmCatalogAttrCache[catalogId];
+  }
+
+  function collectIdTitle(node, acc) {
+    if (!node) return acc;
+    if (Array.isArray(node)) { for (const n of node) collectIdTitle(n, acc); return acc; }
+    if (typeof node !== "object") return acc;
+    if (node.id != null && node.title) acc.push({ id: Number(node.id), title: String(node.title) });
+    for (const key of ["options", "configuration", "sizes", "values", "items", "children"]) {
+      if (node[key]) collectIdTitle(node[key], acc);
+    }
+    for (const k of Object.keys(node)) {
+      const v = node[k];
+      if (v && typeof v === "object" && !["options","configuration","sizes","values","items","children"].includes(k)) {
+        collectIdTitle(v, acc);
+      }
+    }
+    return acc;
+  }
+
+  async function resolveSizeName(catalogId, sizeId) {
+    if (!sizeId) return "";
+    const attrs = await loadCatalogAttributes(catalogId);
+    const sizeAttr = (attrs || []).find(a => a && a.code === "size");
+    if (!sizeAttr) return "";
+    const all = collectIdTitle(sizeAttr, []);
+    const hit = all.find(x => x.id === Number(sizeId));
+    return hit ? hit.title : "";
+  }
+
+
+
 
 
 
@@ -695,7 +767,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
@@ -714,6 +786,17 @@
             brand: pub.brand
           } : { pubNull: true };
           sendResponse({ ok: true, labels, diag });
+        }
+        else if (msg.kind === "RESOLVE_LABELS_V2") {
+          const category = await resolveCategoryName(msg.catalog_id);
+          const size = await resolveSizeName(msg.catalog_id, msg.size_id);
+          const diag = {
+            treeType: Array.isArray(vmCatalogTree) ? `arr(${vmCatalogTree.length})` : typeof vmCatalogTree,
+            firstNodeKeys: Array.isArray(vmCatalogTree) && vmCatalogTree[0] ? Object.keys(vmCatalogTree[0]) : [],
+            attrCodes: (vmCatalogAttrCache[msg.catalog_id] || []).map(a => a && a.code).slice(0, 20),
+            resolvedSize: size, resolvedCategory: category,
+          };
+          sendResponse({ ok: true, size, category, diag });
         }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
