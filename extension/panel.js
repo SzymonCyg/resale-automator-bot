@@ -329,24 +329,34 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
   const valId = (v) => (v && typeof v === "object" ? v.id : v) ?? "";
   const valTitle = (v) => (v && typeof v === "object" ? v.title : "") ?? "";
 
+  function labelFromDetail(d) {
+    if (!d) return { brand:"", size:"", category:"", colors:[] };
+    const t = v => (v && typeof v === "object") ? (v.title || v.name || "") : (typeof v === "string" ? v : "");
+    const brand = d.brand_title || t(d.brand) || t(d.brand_dto) || "";
+    const size = d.size_title || t(d.size) || t(d.size_dto) || "";
+    const category = d.catalog_branch_title || d.catalog_title || t(d.catalog) || t(d.category) || "";
+    const colors = [ t(d.color1) || d.color1_title || "", t(d.color2) || d.color2_title || "" ].filter(Boolean);
+    return { brand, size, category, colors };
+  }
+
   const outRows = rows.map(({ _it, _detail, _labels, _photos }) => {
     const d = _detail || {};
-    const lab = _labels || {};
+    const pub = _labels || {};
+    const det = labelFromDetail(d);
     const attrs = Array.isArray(d.item_attributes) ? d.item_attributes : [];
     const condAttr = attrs.find(a => a && a.code === "condition");
     const statusId = d.status_id || valId(d.status) || d.condition_id || valId(d.condition) || (condAttr?.ids?.[0]) || "";
     const statusLabel = valTitle(d.status) || valTitle(d.condition) || STATUS_ID_TO_LABEL[statusId] || "";
     const brandId = d.brand_id || valId(d.brand_dto) || valId(d.brand) || "";
-    const brandLabel = lab.brand || d.brand_title || valTitle(d.brand_dto) || valTitle(d.brand) || _it.brand || "";
+    const brandLabel = det.brand || pub.brand || _it.brand || "";
     const sizeId = d.size_id || valId(d.size) || "";
-    const sizeLabel = lab.size || d.size_title || valTitle(d.size) || _it.size_title || "";
+    const sizeLabel = det.size || pub.size || _it.size_title || "";
     const catalogId = d.catalog_id || valId(d.catalog) || "";
-    const catalogLabel = lab.category || d.catalog_title || valTitle(d.catalog) || "";
+    const catalogLabel = det.category || pub.category || "";
     const colorIds = [d.color1_id, d.color2_id].filter(c => c != null);
-    const labColors = Array.isArray(lab.colors) ? lab.colors.filter(Boolean) : [];
-    const fallbackColors = [valTitle(d.color1) || d.color1_title, valTitle(d.color2) || d.color2_title].filter(Boolean);
-    const colorLabels = labColors.length ? labColors : fallbackColors;
+    const colorLabels = (det.colors && det.colors.length) ? det.colors : (Array.isArray(pub.colors) ? pub.colors.filter(Boolean) : []);
     const packageId = d.package_size_id || valId(d.package_size) || "";
+
 
 
     const row = {
