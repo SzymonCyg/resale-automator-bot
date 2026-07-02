@@ -2256,39 +2256,71 @@ function aiRenderCard(item) {
     item.resolved.size_title = hit ? hit.title : "";
   });
 
-  // Brand live search input
+  // Brand live search — own dropdown (datalist is unreliable for async options)
+  const brandPicker = card.querySelector(".ai-brand-picker");
   const brandInput = card.querySelector(".ai-brand");
+  const brandResults = card.querySelector(".ai-brand-results");
+  const brandDiag = card.querySelector(".ai-brand-diag");
+  const brandWarn = card.querySelector(".ai-brand-warn");
+  const updateBrandWarn = () => {
+    if (brandWarn) brandWarn.innerHTML = aiFieldWarn(item.resolved?.brand_id);
+  };
+  const hideBrandResults = () => {
+    if (brandResults) { brandResults.style.display = "none"; brandResults.innerHTML = ""; }
+  };
+  let _brandDebounce = null;
+  const runBrandSearch = async (v) => {
+    if (!brandResults) return;
+    try {
+      const tab = await getVintedTab();
+      if (!tab) { if (brandDiag) brandDiag.textContent = "brak zalogowanej karty"; return; }
+      const r = await vintedMsg(tab.id, { kind: "SEARCH_BRANDS_V2", query: v });
+      const brands = (r && r.brands) || [];
+      if (brandDiag) {
+        if (brands.length) brandDiag.textContent = `znaleziono ${brands.length}`;
+        else brandDiag.textContent = `znaleziono 0 — ${JSON.stringify((r && r.diag && r.diag.tried) || []).slice(0, 200)}`;
+      }
+      if (!brands.length) { hideBrandResults(); return; }
+      brandResults.innerHTML = brands.map(b =>
+        `<div class="ai-brand-opt" data-bid="${b.id}" data-bname="${aiEscape(b.title)}" style="padding:6px 8px;cursor:pointer;border-bottom:1px solid var(--bd,#333)">${aiEscape(b.title)}</div>`
+      ).join("");
+      brandResults.style.display = "block";
+    } catch (err) {
+      if (brandDiag) brandDiag.textContent = `błąd: ${String(err && err.message || err).slice(0, 80)}`;
+    }
+  };
   if (brandInput) {
     brandInput.addEventListener("input", (e) => {
       const v = e.target.value;
       item.resolved = item.resolved || {};
-      if (v && v.length >= 2) aiScheduleBrandSearch(v);
-      if (aiBrandByLabel[v] != null) {
-        item.resolved.brand_id = aiBrandByLabel[v];
-        item.resolved.brand_title = v;
-      } else {
-        item.resolved.brand_id = null;
-        item.resolved.brand_title = v;
+      item.resolved.brand_id = null;
+      item.resolved.brand_title = v;
+      updateBrandWarn();
+      clearTimeout(_brandDebounce);
+      if (!v || v.length < 2) { hideBrandResults(); if (brandDiag) brandDiag.textContent = ""; return; }
+      _brandDebounce = setTimeout(() => runBrandSearch(v), 300);
+    });
+    brandInput.addEventListener("blur", () => {
+      setTimeout(hideBrandResults, 200);
+    });
+    brandInput.addEventListener("focus", () => {
+      const v = brandInput.value;
+      if (v && v.length >= 2 && brandResults && brandResults.innerHTML) {
+        brandResults.style.display = "block";
       }
     });
-    brandInput.addEventListener("change", async (e) => {
-      const v = e.target.value;
+  }
+  if (brandResults) {
+    brandResults.addEventListener("mousedown", (e) => {
+      const opt = e.target.closest(".ai-brand-opt");
+      if (!opt) return;
+      e.preventDefault();
       item.resolved = item.resolved || {};
-      if (aiBrandByLabel[v] != null) {
-        item.resolved.brand_id = aiBrandByLabel[v];
-        item.resolved.brand_title = v;
-      } else {
-        _aiBrandSearchLast = "";
-        await aiSearchBrands(v);
-        if (aiBrandByLabel[v] != null) {
-          item.resolved.brand_id = aiBrandByLabel[v];
-          item.resolved.brand_title = v;
-        } else {
-          item.resolved.brand_id = null;
-          item.resolved.brand_title = v;
-        }
-      }
-      aiRenderCard(item);
+      item.resolved.brand_id = Number(opt.dataset.bid);
+      item.resolved.brand_title = opt.dataset.bname;
+      if (brandInput) brandInput.value = opt.dataset.bname;
+      hideBrandResults();
+      updateBrandWarn();
     });
   }
 
