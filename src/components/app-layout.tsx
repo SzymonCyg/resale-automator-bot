@@ -113,6 +113,18 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
       })}
 
       <div className="mt-auto space-y-1">
+        <Link
+          to="/settings"
+          onClick={onNavigate}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+            path === "/settings"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+          )}
+        >
+          <Settings className="h-4 w-4" /> Ustawienia
+        </Link>
         <ThemeToggle />
         <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start" size="sm">
           <LogOut className="mr-2 h-4 w-4" /> Wyloguj
