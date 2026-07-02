@@ -157,6 +157,51 @@ export type Database = {
           },
         ]
       }
+      vinted_tokens: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          raw_cookies: string | null
+          refresh_token: string | null
+          token_type: string | null
+          updated_at: string
+          user_id: string
+          vinted_domain: string
+          vinted_user_id: string
+          vinted_username: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          raw_cookies?: string | null
+          refresh_token?: string | null
+          token_type?: string | null
+          updated_at?: string
+          user_id: string
+          vinted_domain?: string
+          vinted_user_id: string
+          vinted_username?: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          raw_cookies?: string | null
+          refresh_token?: string | null
+          token_type?: string | null
+          updated_at?: string
+          user_id?: string
+          vinted_domain?: string
+          vinted_user_id?: string
+          vinted_username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
