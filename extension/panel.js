@@ -1658,6 +1658,8 @@ function aiPickSizeFromList(sizes, userSize) {
   return hit || null;
 }
 
+function aiUid() { return "ai_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
 
 function aiLog(msg, cls = "") {
   const el = document.getElementById("aiRunLog");
