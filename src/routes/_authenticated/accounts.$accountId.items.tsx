@@ -71,16 +71,59 @@ function ItemsPage() {
       <AccountHeader account={account} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Szukaj po tytule, marce, ID..."
-            className="pl-9"
-          />
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative max-w-sm flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Szukaj po tytule, marce, ID..."
+              className="pl-9"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+            className="rounded-md border border-border bg-background px-3 py-2 text-sm"
+          >
+            <option value="all">Wszystkie statusy</option>
+            <option value="active">Aktywne</option>
+            <option value="inactive">Nieaktywne</option>
+          </select>
         </div>
         <div className="flex flex-wrap gap-2">
+          {selected.size > 0 && (
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={async () => {
+                if (!confirm(`Usunąć ${selected.size} przedmiot(ów) z Vinted? Tej akcji nie można cofnąć.`)) return;
+                setDeleting(true);
+                let ok = 0, err = 0;
+                for (const vintedId of [...selected]) {
+                  try {
+                    await vintedProxy({
+                      method: "DELETE",
+                      path: `/api/v2/items/${vintedId}`,
+                      domain: (account as { country?: string } | undefined)?.country,
+                    });
+                    ok++;
+                  } catch (e) {
+                    console.warn("Delete failed", vintedId, e);
+                    err++;
+                  }
+                  await new Promise((r) => setTimeout(r, 800));
+                }
+                setSelected(new Set());
+                setDeleting(false);
+                itemsQ.refetch();
+                alert(`Usunięto: ${ok}${err ? `, błędy: ${err}` : ""}`);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {deleting ? "Usuwam..." : `Usuń zaznaczone (${selected.size})`}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => exportToCSV(filtered, `vinted-${base}.csv`)} disabled={!filtered.length}>
             <FileDown className="mr-2 h-4 w-4" /> CSV
           </Button>
