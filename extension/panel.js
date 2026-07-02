@@ -1594,8 +1594,72 @@ initPublishDraftsUI();
 // =================== DODAJ Z AI ===================
 let aiItems = [];
 const AI_DELAY_DEFAULTS = { aiDelayMin: 30, aiDelayMax: 60 };
+const AI_STATUS_MAP = { "Nowy z metką": 1, "Nowy bez metki": 2, "Bardzo dobry": 6, "Dobry": 3, "Zadowalający": 4 };
+const AI_STATUS_OPTIONS = ["Nowy z metką", "Nowy bez metki", "Bardzo dobry", "Dobry", "Zadowalający"];
+let aiCatalogLeaves = [];
+let aiLeafByLabel = {};
+let aiSizesCache = {};
+
+function aiNorm(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
+
+async function aiEnsureCatalogLeaves() {
+  if (aiCatalogLeaves.length) return;
+  try {
+    const tab = await getVintedTab();
+    if (!tab) return;
+    const r = await vintedMsg(tab.id, { kind: "GET_CATALOG_LEAVES_V2" });
+    if (r?.ok && Array.isArray(r.leaves)) {
+      aiCatalogLeaves = r.leaves;
+      aiLeafByLabel = {};
+      const dl = document.getElementById("aiCatList");
+      if (dl) dl.innerHTML = "";
+      for (const l of aiCatalogLeaves) {
+        aiLeafByLabel[l.path] = l.id;
+        if (dl) {
+          const opt = document.createElement("option");
+          opt.value = l.path;
+          dl.appendChild(opt);
+        }
+      }
+    }
+  } catch {}
+}
+
+async function aiLoadSizesForCatalog(catalogId) {
+  if (!catalogId) return [];
+  if (aiSizesCache[catalogId]) return aiSizesCache[catalogId];
+  try {
+    const tab = await getVintedTab();
+    if (!tab) return [];
+    const r = await vintedMsg(tab.id, { kind: "GET_CATALOG_SIZES_V2", catalog_id: catalogId });
+    aiSizesCache[catalogId] = (r?.ok && Array.isArray(r.sizes)) ? r.sizes : [];
+  } catch { aiSizesCache[catalogId] = []; }
+  return aiSizesCache[catalogId];
+}
+
+function aiFindLeafIdByLabel(value) {
+  if (!value) return null;
+  if (aiLeafByLabel[value] != null) return aiLeafByLabel[value];
+  const v = aiNorm(value);
+  const exact = aiCatalogLeaves.find(l => aiNorm(l.path) === v || aiNorm(l.title) === v);
+  if (exact) return exact.id;
+  const contain = aiCatalogLeaves.find(l => aiNorm(l.path).includes(v) || v.includes(aiNorm(l.title)));
+  return contain ? contain.id : null;
+}
+
+function aiPickSizeFromList(sizes, userSize) {
+  if (!sizes.length || !userSize) return null;
+  const raw = aiNorm(userSize);
+  const clean = raw.replace(/eu|us|uk/g, "").trim();
+  let hit = sizes.find(s => aiNorm(s.title) === raw);
+  if (!hit && clean) hit = sizes.find(s => aiNorm(s.title) === clean);
+  if (!hit && clean) hit = sizes.find(s => aiNorm(s.title).replace(/\s+/g, "") === clean.replace(/\s+/g, ""));
+  if (!hit && clean) hit = sizes.find(s => aiNorm(s.title).includes(clean));
+  return hit || null;
+}
 
 function aiUid() { return "ai_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
 
 function aiLog(msg, cls = "") {
   const el = document.getElementById("aiRunLog");
@@ -1655,6 +1719,19 @@ function aiRenderCard(item) {
 
   let previewHtml = "";
   if (gen) {
+    const statusCurrent = res?.status_label || gen.condition || "";
+    const statusOpts = AI_STATUS_OPTIONS.map(s =>
+      `<option value="${aiEscape(s)}"${aiNorm(s)===aiNorm(statusCurrent)?" selected":""}>${aiEscape(s)}</option>`
+    ).join("");
+    const catValue = res?.catalog_id
+      ? (aiCatalogLeaves.find(l => l.id === Number(res.catalog_id))?.path || res.catalog_title || "")
+      : "";
+    const sizeList = (res?.catalog_id && aiSizesCache[res.catalog_id]) || [];
+    const sizeOpts = sizeList.length
+      ? `<option value="">— wybierz —</option>` + sizeList.map(s =>
+          `<option value="${s.id}"${Number(res?.size_id)===Number(s.id)?" selected":""}>${aiEscape(s.title)}</option>`
+        ).join("")
+      : `<option value="">najpierw wybierz kategorię</option>`;
     previewHtml = `
       <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border,#333)">
         <label class="muted">Tytuł</label>
@@ -1662,11 +1739,22 @@ function aiRenderCard(item) {
         <label class="muted" style="margin-top:6px;display:block">Opis</label>
         <textarea class="ai-desc" rows="4" style="width:100%">${aiEscape(gen.description)}</textarea>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:12px">
+          <div style="grid-column:1/-1">
+            <label class="muted">Kategoria (wpisz, aby wyszukać)</label>
+            <input class="ai-cat" list="aiCatList" type="text" value="${aiEscape(catValue)}" style="width:100%" placeholder="np. Mężczyźni > Obuwie > Sneakersy" />
+            ${aiFieldWarn(res?.catalog_id)}
+          </div>
+          <div>
+            <label class="muted">Rozmiar</label>
+            <select class="ai-size" style="width:100%" ${res?.catalog_id?"":"disabled"}>${sizeOpts}</select>
+            ${aiFieldWarn(res?.size_id)}
+          </div>
+          <div>
+            <label class="muted">Stan</label>
+            <select class="ai-status" style="width:100%">${statusOpts}</select>
+          </div>
           <div><b>Marka:</b> ${aiEscape(res?.brand_title) || "—"} ${aiFieldWarn(res?.brand_id)}</div>
-          <div><b>Kategoria:</b> ${aiEscape(res?.catalog_title) || "—"} ${aiFieldWarn(res?.catalog_id)}</div>
-          <div><b>Rozmiar:</b> ${aiEscape(res?.size_title) || "—"} ${aiFieldWarn(res?.size_id)}</div>
           <div><b>Kolor:</b> ${aiEscape(res?.color_title) || "—"} ${aiFieldWarn(res?.color_id)}</div>
-          <div><b>Stan:</b> ${aiEscape(res?.status_label) || "—"} ${aiFieldWarn(res?.status_id)}</div>
           <div><b>Paczka (ID):</b> ${res?.package_size_id ?? "—"} ${aiFieldWarn(res?.package_size_id)}</div>
         </div>
       </div>`;
@@ -1690,7 +1778,7 @@ function aiRenderCard(item) {
         </div>
         <div>
           <label class="muted">Rozmiar</label>
-          <input class="ai-size" type="text" value="${aiEscape(item.size)}" style="width:100%" placeholder="np. 43" />
+          <input class="ai-size-in" type="text" value="${aiEscape(item.size)}" style="width:100%" placeholder="np. 45 (EU)" />
         </div>
         <div>
           <label class="muted">Cena (PLN)</label>
@@ -1721,7 +1809,7 @@ function aiRenderCard(item) {
   });
   card.querySelector(".ai-name").addEventListener("input", e => { item.name = e.target.value; });
   card.querySelector(".ai-condition").addEventListener("input", e => { item.condition = e.target.value; });
-  card.querySelector(".ai-size").addEventListener("input", e => { item.size = e.target.value; });
+  card.querySelector(".ai-size-in").addEventListener("input", e => { item.size = e.target.value; });
   card.querySelector(".ai-price").addEventListener("input", e => { item.price = e.target.value; });
   card.querySelector(".ai-package").addEventListener("change", e => { item.packageSize = e.target.value; });
   card.querySelector(".ai-remove").addEventListener("click", () => {
@@ -1733,7 +1821,47 @@ function aiRenderCard(item) {
   if (titleEl) titleEl.addEventListener("input", e => { if (item.gen) item.gen.title = e.target.value; });
   const descEl = card.querySelector(".ai-desc");
   if (descEl) descEl.addEventListener("input", e => { if (item.gen) item.gen.description = e.target.value; });
+
+  const statusEl = card.querySelector(".ai-status");
+  if (statusEl) statusEl.addEventListener("change", e => {
+    const label = e.target.value;
+    item.resolved = item.resolved || {};
+    item.resolved.status_label = label;
+    item.resolved.status_id = AI_STATUS_MAP[label] || null;
+  });
+  const catEl = card.querySelector(".ai-cat");
+  if (catEl) catEl.addEventListener("change", async e => {
+    const val = e.target.value;
+    const id = aiFindLeafIdByLabel(val);
+    item.resolved = item.resolved || {};
+    if (id) {
+      item.resolved.catalog_id = id;
+      const leaf = aiCatalogLeaves.find(l => l.id === id);
+      item.resolved.catalog_title = leaf?.title || val;
+      item.resolved.size_id = null;
+      item.resolved.size_title = "";
+      await aiLoadSizesForCatalog(id);
+      const sizes = aiSizesCache[id] || [];
+      const pick = aiPickSizeFromList(sizes, item.size);
+      if (pick) { item.resolved.size_id = pick.id; item.resolved.size_title = pick.title; }
+      aiRenderCard(item);
+    } else {
+      item.resolved.catalog_id = null;
+      item.resolved.catalog_title = "";
+      aiRenderCard(item);
+    }
+  });
+  const sizeEl = card.querySelector(".ai-size");
+  if (sizeEl && res?.catalog_id) sizeEl.addEventListener("change", e => {
+    const id = Number(e.target.value) || null;
+    item.resolved = item.resolved || {};
+    item.resolved.size_id = id;
+    const sizes = aiSizesCache[res.catalog_id] || [];
+    const hit = sizes.find(s => Number(s.id) === id);
+    item.resolved.size_title = hit ? hit.title : "";
+  });
 }
+
 
 function aiAddCard(seed) {
   const item = Object.assign({
@@ -1818,6 +1946,7 @@ document.getElementById("aiGenerateBtn")?.addEventListener("click", async () => 
   if (!tab) { aiLog("Otwórz zalogowaną kartę vinted.*", "err"); return; }
   btn.disabled = true;
   try {
+    await aiEnsureCatalogLeaves();
     for (let i = 0; i < targets.length; i++) {
       const it = targets[i];
       if (status) status.textContent = `Generuję (${i+1}/${targets.length}): ${it.name}`;
@@ -1831,12 +1960,26 @@ document.getElementById("aiGenerateBtn")?.addEventListener("click", async () => 
           condition: gen.condition, size: it.size, packageSize: it.packageSize,
         });
         it.resolved = r?.resolved || null;
+        if (it.resolved) {
+          if (!it.resolved.status_id && AI_STATUS_MAP[gen.condition]) {
+            it.resolved.status_id = AI_STATUS_MAP[gen.condition];
+            it.resolved.status_label = gen.condition;
+          }
+          if (it.resolved.catalog_id) {
+            const sizes = await aiLoadSizesForCatalog(it.resolved.catalog_id);
+            if (!it.resolved.size_id) {
+              const pick = aiPickSizeFromList(sizes, it.size);
+              if (pick) { it.resolved.size_id = pick.id; it.resolved.size_title = pick.title; }
+            }
+          }
+        }
         aiRenderCard(it);
         aiLog(`  ✓ wygenerowano: ${gen.title}`, "ok");
       } catch (e) {
         aiLog(`  ✗ ${e.message}`, "err");
       }
     }
+
   } finally {
     btn.disabled = false;
     if (status) status.textContent = "";

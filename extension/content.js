@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.19";
+  const CONTENT_VERSION = "1.0.20";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -478,7 +478,12 @@
     if (!list.length) return null;
     const nq = norm(q);
     const exact = list.find(b => norm(b.title) === nq);
-    const pick = exact || list[0];
+    const prefix = !exact ? list.find(b => norm(b.title).startsWith(nq)) : null;
+    const contains = (!exact && !prefix && nq.length >= 3)
+      ? list.find(b => norm(b.title).includes(nq))
+      : null;
+    const pick = exact || prefix || contains;
+    if (!pick) return null;
     return { id: Number(pick.id), title: String(pick.title) };
   }
 
@@ -900,7 +905,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     (async () => {
       try {
-        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RESOLVE_AI_ATTRS_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
+        const requiresLogin = ["FETCH_ITEMS","FETCH_ITEMS_V2","FETCH_ITEM_DETAIL","FETCH_ITEM_DETAIL_V2","FETCH_ITEM_LABELS_V2","RESOLVE_LABELS_V2","RESOLVE_AI_ATTRS_V2","GET_CATALOG_LEAVES_V2","GET_CATALOG_SIZES_V2","RELIST_ITEM","RELIST_ITEM_V2","CREATE_LISTING_V2","PUBLISH_DRAFT_V2","RUN_REPLIES","RUN_REPLIES_V2","SYNC_NOW","SYNC_NOW_V2","DELETE_ITEM_V2"].includes(msg.kind);
         if (requiresLogin) await ensureExtensionSignedIn();
 
         if (msg.kind === "FETCH_ITEMS" || msg.kind === "FETCH_ITEMS_V2") sendResponse({ ok: true, ...(await fetchMyItems()) });
@@ -952,6 +957,25 @@
             colorFound: !!col, statusFound: !!status_id, pkg: package_size_id,
           };
           sendResponse({ ok: true, resolved, diag });
+        }
+        else if (msg.kind === "GET_CATALOG_LEAVES_V2") {
+          const tree = await loadCatalogTree();
+          const all = collectCatalogNodesWithParents(tree, [], []);
+          const leaves = [];
+          for (const { node, parents } of all) {
+            const kids = node.catalogs || node.children || node.catalog;
+            const hasKids = Array.isArray(kids) ? kids.length > 0 : !!kids;
+            if (hasKids) continue;
+            const titles = [...parents.map(p => String(p.title || "")), String(node.title || "")].filter(Boolean);
+            leaves.push({ id: Number(node.id), title: String(node.title || ""), path: titles.join(" > ") });
+          }
+          sendResponse({ ok: true, leaves });
+        }
+        else if (msg.kind === "GET_CATALOG_SIZES_V2") {
+          const attrs = await loadCatalogAttributes(msg.catalog_id);
+          const sizeAttr = (attrs || []).find(a => a && a.code === "size");
+          const sizes = sizeAttr ? collectIdTitle(sizeAttr, []).map(s => ({ id: Number(s.id), title: String(s.title) })) : [];
+          sendResponse({ ok: true, sizes });
         }
         else if (msg.kind === "RELIST_ITEM" || msg.kind === "RELIST_ITEM_V2") sendResponse({ ok: true, ...(await relistItem(msg)) });
         else if (msg.kind === "CREATE_LISTING_V2") sendResponse({ ok: true, ...(await createListing(msg)) });
