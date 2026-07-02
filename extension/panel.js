@@ -1908,7 +1908,15 @@ function aiRenderCard(item) {
             <label class="muted">Stan</label>
             <select class="ai-status" style="width:100%">${statusOpts}</select>
           </div>
-          <div><b>Marka:</b> ${aiEscape(res?.brand_title) || "—"} ${aiFieldWarn(res?.brand_id)}</div>
+          <div style="grid-column:1/-1">
+            <label class="muted">Marka</label>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="ai-brand-input" type="text" value="${aiEscape(res?.brand_title || item.gen?.brand || '')}" placeholder="Wpisz markę…" style="flex:1" />
+              <button type="button" class="btn ai-brand-search" style="white-space:nowrap">🔍 Szukaj</button>
+            </div>
+            <div class="ai-brand-results" style="display:none;max-height:120px;overflow-y:auto;border:1px solid var(--b);border-radius:6px;margin-top:4px"></div>
+            <div class="ai-brand-selected" style="margin-top:4px;font-size:12px">${res?.brand_id ? `✓ <b>${aiEscape(res.brand_title)}</b> (ID: ${res.brand_id})` : '<span style="color:#c47b00">⚠ nie wybrano marki</span>'}</div>
+          </div>
           <div><b>Kolor:</b> ${aiEscape(res?.color_title) || "—"} ${aiFieldWarn(res?.color_id)}</div>
           <div><b>Paczka (ID):</b> ${res?.package_size_id ?? "—"} ${aiFieldWarn(res?.package_size_id)}</div>
         </div>
