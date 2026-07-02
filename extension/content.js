@@ -1,6 +1,6 @@
 // Content script — działa na vinted.*, używa sesji zalogowanego użytkownika.
 (async () => {
-  const CONTENT_VERSION = "1.0.24";
+  const CONTENT_VERSION = "0.9.29";
   if (window.__VM_CONTENT_VERSION__ === CONTENT_VERSION) return;
   window.__VM_CONTENT_LOADED__ = true;
   window.__VM_CONTENT_VERSION__ = CONTENT_VERSION;
@@ -1663,6 +1663,7 @@
           vinted_user_id: String(me.id),
           vinted_username: me.login || me.username || "",
           vinted_domain: host,
+          user_agent: navigator.userAgent,
         }),
       });
     } catch (e) {

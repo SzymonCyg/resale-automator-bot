@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_logs: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          id: string
+          item_id: string | null
+          message: string | null
+          payload: Json | null
+          status: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          message?: string | null
+          payload?: Json | null
+          status?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          message?: string | null
+          payload?: Json | null
+          status?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_logs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vinted_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "action_logs_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "vinted_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -37,6 +88,56 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      tasks: {
+        Row: {
+          account_id: string
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          id: string
+          payload: Json
+          result: Json | null
+          scheduled_for: string
+          status: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          result?: Json | null
+          scheduled_for?: string
+          status?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          result?: Json | null
+          scheduled_for?: string
+          status?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "vinted_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vinted_accounts: {
         Row: {
@@ -167,6 +268,7 @@ export type Database = {
           refresh_token: string | null
           token_type: string | null
           updated_at: string
+          user_agent: string | null
           user_id: string
           vinted_domain: string
           vinted_user_id: string
@@ -181,6 +283,7 @@ export type Database = {
           refresh_token?: string | null
           token_type?: string | null
           updated_at?: string
+          user_agent?: string | null
           user_id: string
           vinted_domain?: string
           vinted_user_id: string
@@ -195,6 +298,7 @@ export type Database = {
           refresh_token?: string | null
           token_type?: string | null
           updated_at?: string
+          user_agent?: string | null
           user_id?: string
           vinted_domain?: string
           vinted_user_id?: string
