@@ -435,10 +435,133 @@
     const hit = all.find(x => x.id === Number(sizeId));
     return hit ? hit.title : "";
   }
+  // ---- AI attr resolvers (name -> id) ----
+  let vmColors = null;
+  const vmPkgCache = {};
 
+  function norm(s) { return (s == null ? "" : String(s)).trim().toLowerCase(); }
 
+  async function loadColors() {
+    if (vmColors) return vmColors;
+    try {
+      const r = await vintedApi("/api/v2/colors");
+      vmColors = r?.colors || r?.dtos || r?.color || [];
+    } catch { vmColors = []; }
+    return vmColors;
+  }
 
+  async function resolveColorId(name) {
+    if (!name) return null;
+    const list = await loadColors();
+    const q = norm(name);
+    if (!q) return null;
+    let hit = list.find(c => norm(c.title) === q);
+    if (!hit) hit = list.find(c => norm(c.title).includes(q) || q.includes(norm(c.title)));
+    return hit ? { id: Number(hit.id), title: String(hit.title) } : null;
+  }
 
+  async function resolveBrandId(name) {
+    if (!name) return null;
+    const q = String(name).trim();
+    const enc = encodeURIComponent(q);
+    let list = [];
+    try {
+      const r = await vintedApi(`/api/v2/brands?search_text=${enc}`);
+      list = r?.brands || r?.dtos || [];
+    } catch {}
+    if (!list.length) {
+      try {
+        const r2 = await vintedApi(`/api/v2/brands?keyword=${enc}`);
+        list = r2?.brands || r2?.dtos || [];
+      } catch {}
+    }
+    if (!list.length) return null;
+    const nq = norm(q);
+    const exact = list.find(b => norm(b.title) === nq);
+    const pick = exact || list[0];
+    return { id: Number(pick.id), title: String(pick.title) };
+  }
+
+  function collectCatalogNodesWithParents(nodes, parents, acc) {
+    if (!nodes) return acc;
+    const arr = Array.isArray(nodes) ? nodes : [nodes];
+    for (const n of arr) {
+      if (!n || typeof n !== "object") continue;
+      acc.push({ node: n, parents });
+      const kids = n.catalogs || n.children || n.catalog;
+      if (kids) collectCatalogNodesWithParents(kids, [...parents, n], acc);
+    }
+    return acc;
+  }
+
+  async function resolveCatalogIdByName(pathOrName) {
+    if (!pathOrName) return null;
+    const tree = await loadCatalogTree();
+    const parts = String(pathOrName).split(">").map(norm).filter(Boolean);
+    if (!parts.length) return null;
+    const leaf = parts[parts.length - 1];
+    const all = collectCatalogNodesWithParents(tree, [], []);
+    const candidates = all.filter(({ node }) => {
+      const t = norm(node.title);
+      return t === leaf || t.includes(leaf) || leaf.includes(t);
+    });
+    if (!candidates.length) return null;
+    const ancestors = parts.slice(0, -1);
+    let best = null;
+    let bestScore = -1;
+    for (const c of candidates) {
+      let score = 0;
+      const parentTitles = c.parents.map(p => norm(p.title));
+      for (const a of ancestors) {
+        if (parentTitles.some(pt => pt === a || pt.includes(a) || a.includes(pt))) score++;
+      }
+      if (norm(c.node.title) === leaf) score += 0.5;
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    const pick = (best || candidates[0]).node;
+    return { id: Number(pick.id), title: String(pick.title) };
+  }
+
+  async function resolveSizeIdByName(catalogId, sizeName) {
+    if (!sizeName || !catalogId) return null;
+    const attrs = await loadCatalogAttributes(catalogId);
+    const sizeAttr = (attrs || []).find(a => a && a.code === "size");
+    if (!sizeAttr) return null;
+    const all = collectIdTitle(sizeAttr, []);
+    const raw = norm(sizeName);
+    const q = raw.replace(/eu|us|uk/g, "").trim();
+    let hit = all.find(x => norm(x.title) === raw);
+    if (!hit && q) hit = all.find(x => norm(x.title) === q);
+    if (!hit && q) hit = all.find(x => norm(x.title).includes(q));
+    if (!hit && q) hit = all.find(x => q.includes(norm(x.title)) && norm(x.title));
+    return hit ? { id: Number(hit.id), title: String(hit.title) } : null;
+  }
+
+  async function resolvePackageSizeId(catalogId, sizeSml) {
+    if (!sizeSml) return null;
+    const raw = norm(sizeSml);
+    let idx = null;
+    if (["s", "mała", "mala", "small", "małe", "male"].includes(raw)) idx = 0;
+    else if (["m", "średnia", "srednia", "medium", "średnie", "srednie"].includes(raw)) idx = 1;
+    else if (["l", "duża", "duza", "large", "duże", "duze"].includes(raw)) idx = 2;
+    if (idx == null) return null;
+    if (catalogId) {
+      const cacheKey = String(catalogId);
+      if (!vmPkgCache[cacheKey]) {
+        try {
+          const r = await vintedApi(`/api/v2/catalogs/${catalogId}/package_sizes`);
+          const list = r?.package_sizes || r?.dtos || r || [];
+          vmPkgCache[cacheKey] = Array.isArray(list)
+            ? list.slice().sort((a, b) => Number(a.id) - Number(b.id))
+            : [];
+        } catch { vmPkgCache[cacheKey] = []; }
+      }
+      const list = vmPkgCache[cacheKey];
+      if (list[idx]?.id != null) return Number(list[idx].id);
+    }
+    const fallback = [1, 2, 3];
+    return fallback[idx];
+  }
 
 
   const STATUS_LABEL_TO_ID = {
