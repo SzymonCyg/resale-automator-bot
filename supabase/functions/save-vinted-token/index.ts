@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { access_token, refresh_token, vinted_user_id, vinted_username, vinted_domain, expires_at } = await req.json();
+    const { access_token, refresh_token, vinted_user_id, vinted_username, vinted_domain, expires_at, user_agent } = await req.json();
 
     if (!access_token || !vinted_user_id) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
       access_token,
       refresh_token: refresh_token || null,
       expires_at: expires_at || null,
+      user_agent: user_agent || null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,vinted_domain' });
 
