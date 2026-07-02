@@ -344,9 +344,10 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
     return { brand, size, category, colors };
   }
 
-  const outRows = rows.map(({ _it, _detail, _labels, _photos }) => {
+  const outRows = rows.map(({ _it, _detail, _labels, _resolved, _photos }) => {
     const d = _detail || {};
     const pub = _labels || {};
+    const rl = _resolved || {};
     const det = labelFromDetail(d);
     const attrs = Array.isArray(d.item_attributes) ? d.item_attributes : [];
     const condAttr = attrs.find(a => a && a.code === "condition");
@@ -355,9 +356,9 @@ $("#exportPhotosBtn").addEventListener("click", async () => {
     const brandId = d.brand_id || valId(d.brand_dto) || valId(d.brand) || "";
     const brandLabel = det.brand || pub.brand || _it.brand || "";
     const sizeId = d.size_id || valId(d.size) || "";
-    const sizeLabel = det.size || pub.size || _it.size_title || "";
+    const sizeLabel = rl.size || det.size || pub.size || _it.size_title || "";
     const catalogId = d.catalog_id || valId(d.catalog) || "";
-    const catalogLabel = det.category || pub.category || "";
+    const catalogLabel = rl.category || det.category || pub.category || "";
     const colorIds = [d.color1_id, d.color2_id].filter(c => c != null);
     const colorLabels = (det.colors && det.colors.length) ? det.colors : (Array.isArray(pub.colors) ? pub.colors.filter(Boolean) : []);
     const packageId = d.package_size_id || valId(d.package_size) || "";
