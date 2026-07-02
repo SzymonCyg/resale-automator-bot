@@ -1952,6 +1952,37 @@ function aiRenderCard(item) {
       aiRenderCard(item);
     }
   });
+  card.querySelectorAll(".ai-cat-gender").forEach(btn => btn.addEventListener("click", () => {
+    item.aiCat = { gender: btn.dataset.g, section: "" };
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-cat-section").forEach(btn => btn.addEventListener("click", () => {
+    item.aiCat = { gender: item.aiCat?.gender || "", section: btn.dataset.s };
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-cat-sub").forEach(btn => btn.addEventListener("click", async () => {
+    const g = item.aiCat?.gender || ""; const s = item.aiCat?.section || "";
+    if (!g || !s) return;
+    const fullPath = `${g} > ${s} > ${btn.dataset.sub}`;
+    await aiApplyCatPath(item, fullPath);
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-cat-crumb").forEach(a => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    const lvl = Number(a.dataset.lvl);
+    if (lvl === 0) item.aiCat = { gender: "", section: "" };
+    else if (lvl === 1) item.aiCat = { gender: item.aiCat?.gender || "", section: "" };
+    aiRenderCard(item);
+  }));
+  const catClear = card.querySelector(".ai-cat-clear");
+  if (catClear) catClear.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    item.resolved.catalog_id = null;
+    item.resolved.catalog_title = "";
+    item.resolved.size_id = null;
+    item.resolved.size_title = "";
+    aiRenderCard(item);
+  });
   const sizeEl = card.querySelector(".ai-size");
   if (sizeEl && res?.catalog_id) sizeEl.addEventListener("change", e => {
     const id = Number(e.target.value) || null;
