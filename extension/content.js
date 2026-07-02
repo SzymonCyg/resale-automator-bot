@@ -1596,4 +1596,80 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", injectSidebar);
   else injectSidebar();
+
+  // ============ SYNC VINTED TOKEN → SUPABASE ============
+  async function extractVintedAccessToken() {
+    let accessToken = null, refreshToken = null;
+    const storageKeys = ["access_token", "oauth_token", "auth_token", "token", "user_token",
+      "vinted_access_token", "vinted_token", "session_token"];
+    for (const key of storageKeys) {
+      try {
+        const val = localStorage.getItem(key);
+        if (val && val.length > 20 && !val.startsWith("{")) { accessToken = val; break; }
+      } catch {}
+    }
+    if (!accessToken) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        let val;
+        try { val = localStorage.getItem(key); } catch { continue; }
+        if (!val || val.length > 200000) continue;
+        try {
+          const obj = JSON.parse(val);
+          const t = obj?.access_token || obj?.token || obj?.auth?.access_token
+            || obj?.session?.access_token || obj?.user?.access_token;
+          if (t && typeof t === "string" && t.length > 20) {
+            accessToken = t;
+            refreshToken = obj?.refresh_token || obj?.auth?.refresh_token || null;
+            break;
+          }
+        } catch {}
+      }
+    }
+    if (!accessToken) {
+      try {
+        const cookie = document.cookie.split(";").map((c) => c.trim())
+          .find((c) => c.startsWith("access_token_web=") || c.startsWith("access_token="));
+        if (cookie) accessToken = decodeURIComponent(cookie.split("=").slice(1).join("="));
+      } catch {}
+    }
+    return { accessToken, refreshToken };
+  }
+
+  async function syncVintedToken() {
+    try {
+      const { accessToken, refreshToken } = await extractVintedAccessToken();
+      if (!accessToken) return;
+      const me = parseUserFromStorage() || parseUserFromDom();
+      if (!me?.id) return;
+      const status = await new Promise((resolve) => {
+        try { chrome.runtime.sendMessage({ kind: "GET_STATUS" }, (r) => resolve(r || null)); }
+        catch { resolve(null); }
+      });
+      const sessionToken = status?.supabaseToken;
+      const supabaseUrl = status?.supabaseUrl;
+      const anonKey = status?.supabaseAnonKey;
+      if (!sessionToken || !supabaseUrl || !anonKey) return;
+      await fetch(`${supabaseUrl}/functions/v1/save-vinted-token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${sessionToken}`,
+          "apikey": anonKey,
+        },
+        body: JSON.stringify({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          vinted_user_id: String(me.id),
+          vinted_username: me.login || me.username || "",
+          vinted_domain: host,
+        }),
+      });
+    } catch (e) {
+      console.warn("[VM] syncVintedToken:", e.message);
+    }
+  }
+
+  setTimeout(syncVintedToken, 3000);
+  setInterval(syncVintedToken, 30 * 60 * 1000);
 })();
