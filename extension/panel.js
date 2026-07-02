@@ -1885,22 +1885,32 @@ function aiFieldWarn(v) {
 }
 
 async function aiCompressPhoto(dataUrl, maxSide = 2000, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      let w = img.naturalWidth, h = img.naturalHeight;
-      if (w > maxSide || h > maxSide) {
-        const ratio = Math.min(maxSide / w, maxSide / h);
-        w = Math.round(w * ratio); h = Math.round(h * ratio);
-      }
-      const c = document.createElement("canvas");
-      c.width = w; c.height = h;
-      c.getContext("2d").drawImage(img, 0, 0, w, h);
-      resolve(c.toDataURL("image/jpeg", quality));
-    };
-    img.onerror = () => reject(new Error("decode fail"));
-    img.src = dataUrl;
-  });
+  // Prefer createImageBitmap from a Blob — bypasses page CSP img-src that can
+  // block data: URLs when the panel runs inside a host page context.
+  const blob = await (await fetch(dataUrl)).blob();
+  let bmp = null;
+  try { bmp = await createImageBitmap(blob); } catch {}
+  if (!bmp) {
+    // Fallback to <img> decode.
+    bmp = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("decode fail"));
+      img.src = dataUrl;
+    });
+  }
+  const iw = bmp.width || bmp.naturalWidth;
+  const ih = bmp.height || bmp.naturalHeight;
+  let w = iw, h = ih;
+  if (w > maxSide || h > maxSide) {
+    const ratio = Math.min(maxSide / w, maxSide / h);
+    w = Math.round(w * ratio); h = Math.round(h * ratio);
+  }
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").drawImage(bmp, 0, 0, w, h);
+  try { bmp.close && bmp.close(); } catch {}
+  return c.toDataURL("image/jpeg", quality);
 }
 
 const AI_CATEGORY_TREE = {
@@ -2503,7 +2513,13 @@ async function aiRun(mode) {
           const compressed = await aiCompressPhoto(dataUrl);
           compressedPhotos.push(compressed);
         } catch (e) {
-          aiLog(`  · pominięto zdjęcie: ${e.message}`, "warn");
+          // Fall back to the original dataUrl rather than dropping the photo.
+          if (typeof dataUrl === "string" && dataUrl.startsWith("data:")) {
+            aiLog(`  · kompresja nieudana (${e.message}), używam oryginału`, "warn");
+            compressedPhotos.push(dataUrl);
+          } else {
+            aiLog(`  · pominięto zdjęcie: ${e.message}`, "warn");
+          }
         }
       }
       if (!compressedPhotos.length) {
