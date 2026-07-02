@@ -1596,6 +1596,177 @@ let aiItems = [];
 const AI_DELAY_DEFAULTS = { aiDelayMin: 30, aiDelayMax: 60 };
 const AI_STATUS_MAP = { "Nowy z metką": 1, "Nowy bez metki": 2, "Bardzo dobry": 6, "Dobry": 3, "Zadowalający": 4 };
 const AI_STATUS_OPTIONS = ["Nowy z metką", "Nowy bez metki", "Bardzo dobry", "Dobry", "Zadowalający"];
+
+// Pełna lista marek Vinted (ID: Nazwa) — używana w pickerze marek
+const AI_BRANDS = [
+  {id:2,t:"Adidas"},{id:4,t:"Nike"},{id:7,t:"H&M"},{id:11,t:"Zara"},{id:14,t:"Levi's"},
+  {id:16,t:"Pull&Bear"},{id:19,t:"Mango"},{id:25,t:"Reserved"},{id:26,t:"House"},
+  {id:27,t:"Cropp"},{id:29,t:"Bershka"},{id:32,t:"New Balance"},{id:41,t:"Puma"},
+  {id:57,t:"Converse"},{id:62,t:"Vans"},{id:96,t:"Tommy Hilfiger"},
+  {id:97,t:"Calvin Klein"},{id:102,t:"Ralph Lauren"},{id:112,t:"Guess"},
+  {id:134,t:"Lee"},{id:135,t:"Wrangler"},{id:142,t:"Diesel"},{id:155,t:"Lacoste"},
+  {id:194,t:"Boss"},{id:207,t:"Armani"},{id:215,t:"Versace"},{id:234,t:"Gucci"},
+  {id:237,t:"Louis Vuitton"},{id:260,t:"Prada"},{id:311,t:"Burberry"},
+  {id:342,t:"Fila"},{id:362,t:"Reebok"},{id:364,t:"Under Armour"},
+  {id:470,t:"Champion"},{id:534,t:"The North Face"},{id:553,t:"Columbia"},
+  {id:604,t:"Timberland"},{id:614,t:"Dr. Martens"},{id:648,t:"UGG"},
+  {id:724,t:"Crocs"},{id:751,t:"Birkenstock"},{id:815,t:"Skechers"},
+  {id:819,t:"ASICS"},{id:822,t:"Salomon"},{id:884,t:"Orsay"},{id:918,t:"Mohito"},
+  {id:934,t:"ONLY"},{id:942,t:"Vero Moda"},{id:964,t:"Vila"},{id:986,t:"Stradivarius"},
+  {id:1004,t:"Terranova"},{id:1012,t:"Gate"},{id:1024,t:"Smyk"},{id:1097,t:"4F"},
+  {id:1108,t:"Protest"},{id:1143,t:"Hummel"},{id:1152,t:"Jack & Jones"},
+  {id:1156,t:"Selected"},{id:1158,t:"Pieces"},{id:1165,t:"Object"},{id:1176,t:"Y.A.S"},
+  {id:1201,t:"Noisy May"},{id:1226,t:"Jacqueline de Yong"},{id:1249,t:"Name It"},
+  {id:1340,t:"Tom Tailor"},{id:1343,t:"Street One"},{id:1348,t:"s.Oliver"},
+  {id:1373,t:"Esprit"},{id:1384,t:"Gerry Weber"},{id:1387,t:"Comma"},{id:1415,t:"Opus"},
+  {id:1450,t:"More & More"},{id:1469,t:"Marc O'Polo"},{id:1472,t:"Bogner"},
+  {id:1489,t:"Falke"},{id:1508,t:"Triumph"},{id:1521,t:"Calida"},{id:1536,t:"Schiesser"},
+  {id:1542,t:"Hanro"},{id:1545,t:"Zimmerli"},{id:1560,t:"Olymp"},{id:1587,t:"Seidensticker"},
+  {id:1621,t:"Eterna"},{id:1631,t:"DKNY"},{id:1645,t:"Michael Kors"},{id:1650,t:"Coach"},
+  {id:1668,t:"Kate Spade"},{id:1685,t:"Tory Burch"},{id:1699,t:"Marc Jacobs"},
+  {id:1712,t:"Furla"},{id:1734,t:"Mulberry"},{id:1741,t:"Ted Baker"},{id:1758,t:"AllSaints"},
+  {id:1771,t:"Reiss"},{id:1785,t:"Whistles"},{id:1802,t:"French Connection"},
+  {id:1815,t:"Karen Millen"},{id:1820,t:"Phase Eight"},{id:1831,t:"Monsoon"},
+  {id:1843,t:"Hobbs"},{id:1858,t:"Joules"},{id:1865,t:"White Stuff"},{id:1872,t:"Boden"},
+  {id:1893,t:"Fat Face"},{id:1918,t:"Seasalt"},{id:1930,t:"Weird Fish"},
+  {id:1944,t:"Cath Kidston"},{id:1978,t:"Anthropologie"},{id:1991,t:"Free People"},
+  {id:2001,t:"Urban Outfitters"},{id:2019,t:"ASOS"},{id:2024,t:"Topshop"},
+  {id:2031,t:"Dorothy Perkins"},{id:2038,t:"Miss Selfridge"},{id:2044,t:"River Island"},
+  {id:2061,t:"Primark"},{id:2068,t:"George"},{id:2075,t:"Next"},{id:2082,t:"M&S"},
+  {id:2088,t:"John Lewis"},{id:2101,t:"Debenhams"},{id:2108,t:"New Look"},
+  {id:2115,t:"Boohoo"},{id:2122,t:"PrettyLittleThing"},{id:2128,t:"Missguided"},
+  {id:2135,t:"SHEIN"},{id:2143,t:"Madewell"},{id:2151,t:"J.Crew"},{id:2158,t:"Gap"},
+  {id:2165,t:"Banana Republic"},{id:2171,t:"Old Navy"},{id:2178,t:"American Eagle"},
+  {id:2185,t:"Hollister"},{id:2191,t:"Abercrombie & Fitch"},{id:2198,t:"Forever 21"},
+  {id:2212,t:"Uniqlo"},{id:2218,t:"COS"},{id:2225,t:"& Other Stories"},{id:2231,t:"Arket"},
+  {id:2238,t:"Weekday"},{id:2245,t:"Monki"},{id:2252,t:"Cheap Monday"},{id:2265,t:"HUGO"},
+  {id:2271,t:"Filippa K"},{id:2278,t:"Acne Studios"},{id:2285,t:"Tiger of Sweden"},
+  {id:2291,t:"J.Lindeberg"},{id:2298,t:"Nudie Jeans"},{id:2304,t:"Helly Hansen"},
+  {id:2311,t:"Fjällräven"},{id:2318,t:"Haglöfs"},{id:2325,t:"Craft"},
+  {id:2332,t:"Peak Performance"},{id:2345,t:"Napapijri"},{id:2352,t:"Patagonia"},
+  {id:2359,t:"Arc'teryx"},{id:2365,t:"Mammut"},{id:2372,t:"Marmot"},{id:2379,t:"Rab"},
+  {id:2386,t:"Bergans"},{id:2393,t:"Norrøna"},{id:2445,t:"Odlo"},{id:2458,t:"Icebreaker"},
+  {id:2471,t:"Smartwool"},{id:2516,t:"Lowa"},{id:2529,t:"Scarpa"},{id:2542,t:"La Sportiva"},
+  {id:2568,t:"Black Diamond"},{id:2717,t:"Five Ten"},{id:2775,t:"Adidas Terrex"},
+  {id:2788,t:"Merrell"},{id:2795,t:"Keen"},{id:2801,t:"Ecco"},{id:2808,t:"Clarks"},
+  {id:2815,t:"Geox"},{id:2822,t:"Camper"},{id:2836,t:"Tamaris"},{id:2843,t:"Deichmann"},
+  {id:2856,t:"Rieker"},{id:3042,t:"Desigual"},{id:3055,t:"Pepe Jeans"},
+  {id:3068,t:"Scotch & Soda"},{id:3081,t:"G-Star RAW"},{id:3094,t:"Replay"},
+  {id:3107,t:"True Religion"},{id:3120,t:"7 For All Mankind"},{id:3256,t:"APC"},
+  {id:3263,t:"Sandro"},{id:3269,t:"Maje"},{id:3276,t:"IRO"},{id:3282,t:"Isabel Marant"},
+  {id:3295,t:"Jacquemus"},{id:3308,t:"Ami Paris"},{id:3315,t:"Maison Kitsuné"},
+  {id:3321,t:"Kenzo"},{id:3328,t:"Lanvin"},{id:3334,t:"Givenchy"},{id:3341,t:"Celine"},
+  {id:3347,t:"Loewe"},{id:3354,t:"Bottega Veneta"},{id:3360,t:"Miu Miu"},{id:3367,t:"Fendi"},
+  {id:3373,t:"Balenciaga"},{id:3380,t:"Alexander McQueen"},{id:3386,t:"Saint Laurent"},
+  {id:3393,t:"Valentino"},{id:3399,t:"Chloe"},{id:3406,t:"Max Mara"},{id:3412,t:"Marni"},
+  {id:3419,t:"Jil Sander"},{id:3432,t:"Ganni"},
+  {id:4001,t:"Bytom"},{id:4002,t:"Wittchen"},{id:4007,t:"Solar"},
+  {id:4009,t:"Medicine"},{id:4010,t:"Sinsay"},{id:4011,t:"Carry"},{id:4012,t:"Ryłko"},
+  {id:4013,t:"Lasocki"},{id:4014,t:"Venezia"},{id:4015,t:"CCC"},{id:4016,t:"Big Star"},
+  {id:4017,t:"Top Secret"},{id:4018,t:"Simple"},{id:4019,t:"Quiosque"},
+  {id:4021,t:"Vistula"},{id:4022,t:"Lancerto"},{id:4023,t:"Próchnik"},{id:4024,t:"Wojas"},
+];
+
+const AI_COLORS = [
+  {id:1,  t:"Czarny",      hex:"#222222"},
+  {id:3,  t:"Szary",       hex:"#9E9E9E"},
+  {id:4,  t:"Biały",       hex:"#FFFFFF", border:true},
+  {id:5,  t:"Beżowy",      hex:"#D4B896"},
+  {id:6,  t:"Kremowy",     hex:"#FFF8E7", border:true},
+  {id:7,  t:"Różowy",      hex:"#F48FB1"},
+  {id:8,  t:"Czerwony",    hex:"#E53935"},
+  {id:9,  t:"Fioletowy",   hex:"#7B1FA2"},
+  {id:10, t:"Niebieski",   hex:"#1976D2"},
+  {id:11, t:"Granatowy",   hex:"#1A237E"},
+  {id:12, t:"Zielony",     hex:"#388E3C"},
+  {id:13, t:"Żółty",       hex:"#FDD835"},
+  {id:14, t:"Pomarańczowy",hex:"#F57C00"},
+  {id:15, t:"Brązowy",     hex:"#6D4C41"},
+  {id:16, t:"Złoty",       hex:"#FFD600"},
+  {id:17, t:"Srebrny",     hex:"#B0BEC5"},
+  {id:20, t:"Wielobarwny", hex:"linear-gradient(135deg,#E53935 25%,#1976D2 50%,#388E3C 75%)"},
+  {id:21, t:"Khaki",       hex:"#8D8741"},
+  {id:22, t:"Miedziany",   hex:"#B87333"},
+  {id:23, t:"Bordowy",     hex:"#880E4F"},
+  {id:24, t:"Turkusowy",   hex:"#00BCD4"},
+  {id:25, t:"Lawendowy",   hex:"#CE93D8"},
+  {id:27, t:"Miętowy",     hex:"#A5D6A7"},
+  {id:28, t:"Koralowy",    hex:"#FF7043"},
+  {id:29, t:"Indygo",      hex:"#3F51B5"},
+  {id:30, t:"Oliwkowy",    hex:"#827717"},
+  {id:31, t:"Jasnoróżowy", hex:"#F8BBD0"},
+  {id:32, t:"Morelowy",    hex:"#FFCC80"},
+  {id:33, t:"Malinowy",    hex:"#C2185B"},
+  {id:34, t:"Ceglasty",    hex:"#BF360C"},
+  {id:36, t:"Perłowy",     hex:"#F5F0E8", border:true},
+];
+
+function aiBrandPickerHtml(item) {
+  const res = item.resolved || {};
+  const selected = res.brand_id ? AI_BRANDS.find(b => b.id === Number(res.brand_id)) : null;
+  const query = item._brandSearch || "";
+  const filtered = query.length >= 2
+    ? AI_BRANDS.filter(b => b.t.toLowerCase().includes(query.toLowerCase())).slice(0, 20)
+    : AI_BRANDS.slice(0, 30);
+
+  return `
+    <div class="ai-brand-picker" style="position:relative">
+      ${selected
+        ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+             <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:12px;font-size:12px;display:inline-flex;align-items:center;gap:6px">
+               ${aiEscape(selected.t)}
+               <button type="button" class="ai-brand-clear" style="background:transparent;border:0;color:#166534;cursor:pointer;font-weight:bold;font-size:14px">×</button>
+             </span>
+           </div>`
+        : ""}
+      <input class="ai-brand-search-input" type="text" placeholder="Szukaj marki…" value="${aiEscape(query)}" style="width:100%;margin-bottom:4px" />
+      <div class="ai-brand-list" style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
+        ${filtered.map(b =>
+          `<button type="button" class="btn ai-brand-opt${selected && selected.id === b.id ? " primary" : ""}" data-bid="${b.id}" data-bname="${aiEscape(b.t)}" style="font-size:11px;padding:3px 8px">${aiEscape(b.t)}</button>`
+        ).join("")}
+      </div>
+      ${!selected ? `<div class="muted" style="color:#c47b00;font-size:11px;margin-top:4px">⚠ nie rozpoznano — wybierz markę ręcznie</div>` : ""}
+    </div>`;
+}
+
+function aiColorPickerHtml(item) {
+  const res = item.resolved || {};
+  const selId1 = res.color_id ? Number(res.color_id) : null;
+  const selId2 = res.color_id2 ? Number(res.color_id2) : null;
+
+  return `
+    <div class="ai-color-picker">
+      <div style="font-size:11px;color:#aaa;margin-bottom:4px">Kliknij aby wybrać (max 2)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        ${AI_COLORS.map(c => {
+          const bg = c.hex;
+          const border = (c.border || c.hex === '#FFFFFF') ? "1px solid #ccc" : "none";
+          const sel1 = selId1 === c.id;
+          const sel2 = selId2 === c.id;
+          const ring = sel1 ? "2px solid #5eead4" : sel2 ? "2px solid #a78bfa" : "2px solid transparent";
+          const label = sel1 ? "1" : sel2 ? "2" : "";
+          return `<button type="button" class="ai-color-btn" data-cid="${c.id}" data-cname="${aiEscape(c.t)}"
+            title="${aiEscape(c.t)}"
+            style="width:28px;height:28px;border-radius:50%;background:${bg};border:${border};outline:${ring};outline-offset:2px;position:relative;cursor:pointer;flex-shrink:0">
+            ${label ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;color:#fff;text-shadow:0 0 2px #000">${label}</span>` : ""}
+          </button>`;
+        }).join("")}
+      </div>
+      <div style="margin-top:6px;font-size:12px">
+        ${selId1 ? `<span style="display:inline-flex;align-items:center;gap:4px;background:#1e293b;color:#fff;padding:2px 8px;border-radius:10px;margin-right:4px">
+          <span style="width:10px;height:10px;border-radius:50%;background:${AI_COLORS.find(c=>c.id===selId1)?.hex||'#888'};display:inline-block"></span>
+          ${aiEscape(AI_COLORS.find(c=>c.id===selId1)?.t||"")}
+          <button type="button" class="ai-color-clear" data-cn="1" style="background:transparent;border:0;cursor:pointer;color:#aaa;font-size:12px">×</button>
+        </span>` : ""}
+        ${selId2 ? `<span style="display:inline-flex;align-items:center;gap:4px;background:#1e293b;color:#fff;padding:2px 8px;border-radius:10px">
+          <span style="width:10px;height:10px;border-radius:50%;background:${AI_COLORS.find(c=>c.id===selId2)?.hex||'#888'};display:inline-block"></span>
+          ${aiEscape(AI_COLORS.find(c=>c.id===selId2)?.t||"")}
+          <button type="button" class="ai-color-clear" data-cn="2" style="background:transparent;border:0;cursor:pointer;color:#aaa;font-size:12px">×</button>
+        </span>` : ""}
+        ${!selId1 && !selId2 ? `<span class="muted" style="color:#c47b00;font-size:11px">⚠ nie wybrano koloru</span>` : ""}
+      </div>
+    </div>`;
+}
 let aiCatalogLeaves = [];
 let aiLeafByLabel = {};
 let aiSizesCache = {};
@@ -1910,14 +2081,12 @@ function aiRenderCard(item) {
           </div>
           <div style="grid-column:1/-1">
             <label class="muted">Marka</label>
-            <div style="display:flex;gap:6px;align-items:center">
-              <input class="ai-brand-input" type="text" value="${aiEscape(res?.brand_title || item.gen?.brand || '')}" placeholder="Wpisz markę…" style="flex:1" />
-              <button type="button" class="btn ai-brand-search" style="white-space:nowrap">🔍 Szukaj</button>
-            </div>
-            <div class="ai-brand-results" style="display:none;max-height:120px;overflow-y:auto;border:1px solid var(--b);border-radius:6px;margin-top:4px"></div>
-            <div class="ai-brand-selected" style="margin-top:4px;font-size:12px">${res?.brand_id ? `✓ <b>${aiEscape(res.brand_title)}</b> (ID: ${res.brand_id})` : '<span style="color:#c47b00">⚠ nie wybrano marki</span>'}</div>
+            ${aiBrandPickerHtml(item)}
           </div>
-          <div><b>Kolor:</b> ${aiEscape(res?.color_title) || "—"} ${aiFieldWarn(res?.color_id)}</div>
+          <div style="grid-column:1/-1">
+            <label class="muted">Kolor (max 2)</label>
+            ${aiColorPickerHtml(item)}
+          </div>
           <div><b>Paczka (ID):</b> ${res?.package_size_id ?? "—"} ${aiFieldWarn(res?.package_size_id)}</div>
         </div>
       </div>`;
@@ -2050,53 +2219,6 @@ function aiRenderCard(item) {
     aiRenderCard(item);
   });
 
-  const brandInput = card.querySelector(".ai-brand-input");
-  const brandSearch = card.querySelector(".ai-brand-search");
-  const brandResults = card.querySelector(".ai-brand-results");
-  const brandSelected = card.querySelector(".ai-brand-selected");
-
-  async function searchBrand(query) {
-    if (!query.trim()) return;
-    brandSearch.disabled = true;
-    brandSearch.textContent = "…";
-    try {
-      const tab = await getVintedTab();
-      if (!tab) return;
-      const r = await vintedMsg(tab.id, {
-        kind: "RESOLVE_AI_ATTRS_V2",
-        brand: query, category: "", color: "", condition: "", size: "", packageSize: ""
-      });
-      if (r?.resolved?.brand_id) {
-        const b = { id: r.resolved.brand_id, title: r.resolved.brand_title };
-        brandResults.style.display = "block";
-        brandResults.innerHTML = `<div class="ai-brand-opt" data-id="${b.id}" data-title="${aiEscape(b.title)}" style="padding:6px 10px;cursor:pointer;font-size:13px">${aiEscape(b.title)}</div>`;
-      } else {
-        brandResults.style.display = "block";
-        brandResults.innerHTML = `<div style="padding:6px;color:#c47b00;font-size:12px">Nie znaleziono — spróbuj innej nazwy</div>`;
-      }
-      brandResults.querySelectorAll(".ai-brand-opt").forEach(opt => {
-        opt.addEventListener("mouseenter", () => opt.style.background = "var(--s2)");
-        opt.addEventListener("mouseleave", () => opt.style.background = "");
-        opt.addEventListener("click", () => {
-          item.resolved = item.resolved || {};
-          item.resolved.brand_id = Number(opt.dataset.id);
-          item.resolved.brand_title = opt.dataset.title;
-          brandSelected.innerHTML = `✓ <b>${aiEscape(opt.dataset.title)}</b> (ID: ${opt.dataset.id})`;
-          brandResults.style.display = "none";
-          brandInput.value = opt.dataset.title;
-        });
-      });
-    } catch (e) {
-      brandResults.innerHTML = `<div style="padding:6px;font-size:12px;color:red">${aiEscape(e.message)}</div>`;
-      brandResults.style.display = "block";
-    } finally {
-      brandSearch.disabled = false;
-      brandSearch.textContent = "🔍 Szukaj";
-    }
-  }
-
-  if (brandSearch) brandSearch.addEventListener("click", () => searchBrand(brandInput.value));
-  if (brandInput) brandInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); searchBrand(brandInput.value); } });
   const sizeEl = card.querySelector(".ai-size");
   if (sizeEl && res?.catalog_id) sizeEl.addEventListener("change", e => {
     const id = Number(e.target.value) || null;
@@ -2106,6 +2228,66 @@ function aiRenderCard(item) {
     const hit = sizes.find(s => Number(s.id) === id);
     item.resolved.size_title = hit ? hit.title : "";
   });
+
+  // Brand picker events
+  const brandSearchInput = card.querySelector(".ai-brand-search-input");
+  if (brandSearchInput) {
+    brandSearchInput.addEventListener("input", e => {
+      item._brandSearch = e.target.value;
+      aiRenderCard(item);
+    });
+  }
+  card.querySelectorAll(".ai-brand-opt").forEach(btn => btn.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    item.resolved.brand_id = Number(btn.dataset.bid);
+    item.resolved.brand_title = btn.dataset.bname;
+    item._brandSearch = "";
+    aiRenderCard(item);
+  }));
+  const brandClear = card.querySelector(".ai-brand-clear");
+  if (brandClear) brandClear.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    item.resolved.brand_id = null;
+    item.resolved.brand_title = "";
+    item._brandSearch = "";
+    aiRenderCard(item);
+  });
+
+  // Color picker events
+  card.querySelectorAll(".ai-color-btn").forEach(btn => btn.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    const cid = Number(btn.dataset.cid);
+    const cname = btn.dataset.cname;
+    if (item.resolved.color_id === cid) {
+      item.resolved.color_id = item.resolved.color_id2 || null;
+      item.resolved.color_title = item.resolved.color_title2 || "";
+      item.resolved.color_id2 = null;
+      item.resolved.color_title2 = "";
+    } else if (item.resolved.color_id2 === cid) {
+      item.resolved.color_id2 = null;
+      item.resolved.color_title2 = "";
+    } else if (!item.resolved.color_id) {
+      item.resolved.color_id = cid;
+      item.resolved.color_title = cname;
+    } else if (!item.resolved.color_id2) {
+      item.resolved.color_id2 = cid;
+      item.resolved.color_title2 = cname;
+    }
+    aiRenderCard(item);
+  }));
+  card.querySelectorAll(".ai-color-clear").forEach(btn => btn.addEventListener("click", () => {
+    item.resolved = item.resolved || {};
+    if (btn.dataset.cn === "1") {
+      item.resolved.color_id = item.resolved.color_id2 || null;
+      item.resolved.color_title = item.resolved.color_title2 || "";
+      item.resolved.color_id2 = null;
+      item.resolved.color_title2 = "";
+    } else {
+      item.resolved.color_id2 = null;
+      item.resolved.color_title2 = "";
+    }
+    aiRenderCard(item);
+  }));
 }
 
 
@@ -2284,7 +2466,7 @@ async function aiRun(mode) {
         size_id: r.size_id,
         status_id: r.status_id,
         catalog_id: r.catalog_id,
-        color_ids: r.color_id ? [r.color_id] : [],
+        color_ids: [r.color_id, r.color_id2].filter(id => id != null && id > 0),
         package_size_id: r.package_size_id,
         is_unisex: false,
       };
