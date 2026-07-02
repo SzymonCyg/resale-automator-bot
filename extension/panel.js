@@ -2143,6 +2143,7 @@ function aiRenderCard(item) {
         <label class="muted">Zdjęcia</label>
         <input class="ai-photos" type="file" accept="image/*" multiple />
         <div class="ai-thumbs" style="display:flex;flex-wrap:wrap;margin-top:4px">${thumbs}</div>
+        ${photoErrors}
       </div>
       <div style="flex:2;min-width:260px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div style="grid-column:1/-1">
